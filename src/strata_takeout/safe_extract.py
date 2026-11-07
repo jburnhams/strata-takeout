@@ -8,8 +8,11 @@ paths.py) and skipping nested earlier exports (Drive/Takeout/), so extraction ne
 import os, shutil, sys, tarfile, time, zipfile
 from .paths import NESTED, clean_parts, safe_parts
 
+FILE_SUFFIX = '~file'          # appended to a file whose path is also a directory (file and folder with the same name)
+
 def extract(arch, dest, mapf=None, err=None, strip=1, nested=NESTED):
     err = err or sys.stderr; dest = os.path.abspath(dest); renames, failed = [], 0
+    os.makedirs(dest, exist_ok=True)
 
     def target(name):
         parts = safe_parts(name, dest, nested, strip)
@@ -18,8 +21,24 @@ def extract(arch, dest, mapf=None, err=None, strip=1, nested=NESTED):
         if parts != orig: renames.append((os.path.basename(arch), '/'.join(orig), '/'.join(parts)))
         return os.path.join(dest, *parts) if parts else None
 
+    def note(old, new):
+        renames.append((os.path.basename(arch), os.path.relpath(old, dest), os.path.relpath(new, dest)))
+
+    def ensure_dir(d):
+        """mkdir -p, but a file squatting on a directory name is moved aside to `<name>~file` (the directory has children, so it keeps the name)."""
+        rel = os.path.relpath(d, dest)
+        if rel == '.': os.makedirs(d, exist_ok=True); return
+        cur = dest
+        for part in rel.split(os.sep):
+            cur = os.path.join(cur, part)
+            if os.path.lexists(cur) and not os.path.isdir(cur):
+                os.replace(cur, cur + FILE_SUFFIX); note(cur, cur + FILE_SUFFIX)
+            if not os.path.isdir(cur): os.mkdir(cur)
+
     def put(path, src, mtime):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        ensure_dir(os.path.dirname(path))
+        if os.path.isdir(path):                                                     # Drive allows a file and a folder with one name: the folder wins, the file is stored beside it
+            note(path, path + FILE_SUFFIX); path += FILE_SUFFIX
         with open(path, 'wb') as out: shutil.copyfileobj(src, out, 1 << 20)
         if mtime: os.utime(path, (mtime, mtime))
 
@@ -29,7 +48,7 @@ def extract(arch, dest, mapf=None, err=None, strip=1, nested=NESTED):
                 try:
                     p = target(i.filename)
                     if p is None: continue
-                    if i.is_dir(): os.makedirs(p, exist_ok=True); continue
+                    if i.is_dir(): ensure_dir(p); continue
                     with z.open(i) as src: put(p, src, time.mktime(i.date_time + (0, 0, -1)))
                 except Exception as e:
                     failed += 1; print(f'failed: {i.filename[:120]!r}: {e}', file=err)
@@ -39,7 +58,7 @@ def extract(arch, dest, mapf=None, err=None, strip=1, nested=NESTED):
                 try:
                     p = target(m.name)
                     if p is None: continue
-                    if m.isdir(): os.makedirs(p, exist_ok=True)
+                    if m.isdir(): ensure_dir(p)
                     elif m.isreg(): put(p, t.extractfile(m), m.mtime)
                 except Exception as e:
                     failed += 1; print(f'failed: {m.name[:120]!r}: {e}', file=err)

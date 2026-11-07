@@ -52,3 +52,24 @@ def test_cli_strip_and_nested_options(tmp_path):
     z = mk(tmp_path / 'a.zip', {'top/Drive/Takeout/n.zip': 'n', 'top/keep.txt': 'k'})
     with pytest.raises(SystemExit) as e: main([z, str(tmp_path / 'o'), '--strip', '0', '--nested', ''])
     assert e.value.code == 0 and files_under(tmp_path / 'o') == ['top/Drive/Takeout/n.zip', 'top/keep.txt']
+
+def test_a_file_and_a_folder_with_the_same_name_both_survive_whichever_arrives_first(tmp_path):
+    name = 'Takeout/Drive/clip.MP4'
+    folder = mk(tmp_path / 'folder.zip', {name + '/inner.mp4': 'INNER', name + '/meta.json': '{}'})
+    plain = mk(tmp_path / 'file.zip', {name: 'THE-FILE'})
+    # order 1: folder first, then the file
+    d1 = tmp_path / 'one'; m1 = tmp_path / 'one.tsv'
+    assert extract(folder, str(d1)) == 0 and extract(plain, str(d1), str(m1)) == 0
+    assert (d1 / 'Drive/clip.MP4/inner.mp4').read_text() == 'INNER' and (d1 / 'Drive/clip.MP4~file').read_text() == 'THE-FILE'
+    assert m1.read_text().strip().split('\t')[1:] == ['Drive/clip.MP4', 'Drive/clip.MP4~file']                  # the original path -> where it was stored
+    # order 2: the file first, then the folder: the file is moved aside, the folder takes the name
+    d2 = tmp_path / 'two'
+    assert extract(plain, str(d2)) == 0 and extract(folder, str(d2)) == 0
+    assert (d2 / 'Drive/clip.MP4/inner.mp4').read_text() == 'INNER' and (d2 / 'Drive/clip.MP4~file').read_text() == 'THE-FILE' and (d2 / 'Drive/clip.MP4').is_dir()
+    # same final state either way, and extracting again changes nothing
+    before = files_under(d2); extract(plain, str(d2)); extract(folder, str(d2)); assert files_under(d2) == before == files_under(d1)
+
+def test_a_file_where_a_deeper_path_needs_a_directory(tmp_path):
+    a = mk(tmp_path / 'a.zip', {'Takeout/x/y': 'FILE-Y'}); b = mk(tmp_path / 'b.zip', {'Takeout/x/y/z.txt': 'Z'})
+    d = tmp_path / 'o'; assert extract(a, str(d)) == 0 and extract(b, str(d)) == 0
+    assert (d / 'x/y/z.txt').read_text() == 'Z' and (d / 'x/y~file').read_text() == 'FILE-Y'

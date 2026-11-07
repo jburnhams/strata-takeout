@@ -15,6 +15,8 @@ REMOTE=${TAKEOUT_REMOTE:-gdrive:Takeout}
 ROOT=${EXPORTS_ROOT:-/srv/exports}/google-takeout
 STAGE=${STAGE:-$HOME/.cache/takeout-stage}
 STAGE_MAX=${STAGE_MAX:-300}      # GB of archives allowed on the stage before pausing downloads
+MIN_FREE_GB=${MIN_FREE_GB:-400}  # downloads also pause while the filesystem holding the stage has less than this free (finished zips are kept next to it)
+NTFY_SEND=${NTFY_SEND:-$HOME/.local/bin/ntfy-send}
 BATCH=${BATCH:-100G}
 MIN_AGE=${MIN_AGE:-10m}
 MODE=archives; DRY=()
@@ -53,7 +55,15 @@ if [ "$MODE" = files ]; then
   rc_move "$REMOTE" "$ROOT/loose" "${NOARCH[@]}" "${COMMON[@]}" || { echo "rclone move (non-archives) failed" >&2; rc=1; }
 else
   used=$(( $(du -sb "$STAGE" | cut -f1) / 1000000000 ))
-  if [ "$used" -ge "$STAGE_MAX" ]; then
+  free=$(df -B1000000000 --output=avail "$STAGE" | tail -1 | tr -d ' ')
+  if [ "$free" -lt "$MIN_FREE_GB" ]; then
+    echo "only ${free} GB free where the stage lives (< MIN_FREE_GB=$MIN_FREE_GB): downloads paused until zips are deleted or moved"
+    # one push per 6 hours, so a paused pipeline is noticed without a flood
+    mark="${XDG_STATE_HOME:-$HOME/.local/state}/strata-takeout/lowspace.notified"; mkdir -p "$(dirname "$mark")"
+    if [ -z "$(find "$mark" -mmin -360 2>/dev/null)" ]; then
+      "$NTFY_SEND" "Takeout downloads paused: disk almost full" "Only ${free} GB free where the stage and finished zips live (floor ${MIN_FREE_GB} GB). Delete verified zips from done/ to resume." high warning 2>/dev/null; touch "$mark"
+    fi
+  elif [ "$used" -ge "$STAGE_MAX" ]; then
     echo "stage holds ${used} GB (>= $STAGE_MAX): waiting for takeout-extract to drain it"
   else
     echo "archives -> $STAGE (stage ${used} GB, batch $BATCH, $XFERS transfers)"

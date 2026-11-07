@@ -96,3 +96,11 @@ def test_google_archives_are_handed_to_the_google_stage_not_extracted_here(w, tm
     assert inbox.run(str(w.inbox), str(w.exports), str(w.done), settle=0, recheck=0, filecat='fc', log=w.logs.append, stage=str(stage)) == (2, 0)
     assert (stage / 'takeout-20260209T000000Z-001.zip').exists() and not (w.exports / 'google').exists()          # takeout-extract does the rest
     assert (w.exports / 'google-takeout/loose/extra.json').exists()
+
+
+def test_a_second_run_while_one_is_in_progress_exits_quietly(tmp_path, monkeypatch):
+    import fcntl
+    monkeypatch.setenv('XDG_RUNTIME_DIR', str(tmp_path)); monkeypatch.setenv('EXPORTS_ROOT', str(tmp_path / 'ex')); monkeypatch.setenv('INBOX', str(tmp_path / 'in'))
+    held = open(tmp_path / 'strata-takeout-inbox.lock', 'w'); fcntl.flock(held, fcntl.LOCK_EX)
+    with pytest.raises(SystemExit) as e: inbox.main([])
+    assert e.value.code == 0

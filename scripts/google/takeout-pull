@@ -2,7 +2,7 @@
 # takeout-pull: move finished Google Takeout files from Drive to local disks, deleting them from Drive.
 #   takeout-pull [--files] [--dry-run]     (default: archives; --files: the non-archives)
 # Drive "Takeout" folder (remote gdrive:, full-drive scope) is split in two independent jobs (own lock, own systemd unit/timer),
-# so a few huge videos never hold up the zips; total parallel transfers = FILE_TRANSFERS (1) + TRANSFERS (2) = 3:
+# so a few huge videos never hold up the zips; total parallel transfers = FILE_TRANSFERS (1) + TRANSFERS (5) = 6:
 #   --files: non-archives (.mp4, .mbox, ...)  -> straight to the exports disk: /srv/exports/google-takeout/loose/
 #   default: archives (.zip .tgz .tar)  -> staged on the NVMe in $STAGE (~/.cache/takeout-stage: outside restic, not tmpfs),
 #      in batches of BATCH (soft cutoff) and only while the stage holds less than STAGE_MAX GB. takeout-extract (own timer)
@@ -32,7 +32,7 @@ NOARCH=(--exclude '*.zip' --exclude '*.tgz' --exclude '*.tar.gz' --exclude '*.ta
 DUPES=$(mktemp); trap 'rm -f "$DUPES"' EXIT
 # rclone logs one line per same-named duplicate on Drive (they are skipped and stay on Drive); keep them out of the journal (and alert text), count them instead
 rc_move() { rclone move "$@" 2> >(tee -a "$DUPES" | grep -v 'Duplicate object found' >&2); local r=$?; wait; return $r; }
-XFERS=${FILE_TRANSFERS:-1}; [ "$MODE" = archives ] && XFERS=${TRANSFERS:-2}
+XFERS=${FILE_TRANSFERS:-1}; [ "$MODE" = archives ] && XFERS=${TRANSFERS:-5}
 COMMON=(--min-age "$MIN_AGE" --drive-use-trash=false --drive-acknowledge-abuse --order-by name,ascending
         --transfers "$XFERS" --checkers 4 --retries 5 --low-level-retries 20 --delete-empty-src-dirs
         --stats 5m --stats-one-line --log-level NOTICE "${DRY[@]}")

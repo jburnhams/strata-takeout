@@ -2,10 +2,10 @@
 # takeout-pull: move finished Google Takeout files from Drive to local disks, deleting them from Drive.
 #   takeout-pull [--files] [--dry-run]     (default: archives; --files: the non-archives)
 # Drive "Takeout" folder (remote gdrive:, full-drive scope) is split in two independent jobs (own lock, own systemd unit/timer),
-# so a few huge videos never hold up the zips; total parallel transfers = FILE_TRANSFERS (1) + TRANSFERS (5) = 6:
+# so a few huge videos never hold up the zips; total parallel transfers = FILE_TRANSFERS (1) + TRANSFERS (10) = 11:
 #   --files: non-archives (.mp4, .mbox, ...)  -> straight to the exports disk: /srv/exports/google-takeout/loose/
 #   default: archives (.zip .tgz .tar)  -> staged on the NVMe in $STAGE (~/.cache/takeout-stage: outside restic, not tmpfs),
-#      in batches of BATCH (soft cutoff) and only while the stage holds less than STAGE_MAX GB. takeout-extract (own timer)
+#      in batches of at most BATCH (soft cutoff), each sized to what is free above MIN_FREE_GB (minus ~5 GB of in-flight margin per stream). takeout-extract (own timer)
 #      extracts them oldest export first onto the exports disk and moves each archive to done/, which frees the stage.
 # `rclone move` deletes each Drive file only after the copy is verified (size + hash); --drive-use-trash=false so the space
 # is freed on Drive at once. Files younger than MIN_AGE are skipped (Takeout may still be writing them).
@@ -14,8 +14,8 @@ set -uo pipefail
 REMOTE=${TAKEOUT_REMOTE:-gdrive:Takeout}
 ROOT=${EXPORTS_ROOT:-/srv/exports}/google-takeout
 STAGE=${STAGE:-$HOME/.cache/takeout-stage}
-STAGE_MAX=${STAGE_MAX:-300}      # GB of archives allowed on the stage before pausing downloads
-MIN_FREE_GB=${MIN_FREE_GB:-400}  # downloads also pause while the filesystem holding the stage has less than this free (finished zips are kept next to it)
+STAGE_MAX=${STAGE_MAX:-0}        # optional cap in GB on archives waiting in the stage (0 = off: the free-space rule below is what limits downloads)
+MIN_FREE_GB=${MIN_FREE_GB:-400}  # the free-space floor: the filesystem holding the stage (and the finished zips next to it) never goes below this; each batch is sized to fit above it
 NTFY_SEND=${NTFY_SEND:-$HOME/.local/bin/ntfy-send}
 BATCH=${BATCH:-100G}
 MIN_AGE=${MIN_AGE:-10m}
@@ -32,7 +32,7 @@ NOARCH=(--exclude '*.zip' --exclude '*.tgz' --exclude '*.tar.gz' --exclude '*.ta
 DUPES=$(mktemp); trap 'rm -f "$DUPES"' EXIT
 # rclone logs one line per same-named duplicate on Drive (they are skipped and stay on Drive); keep them out of the journal (and alert text), count them instead
 rc_move() { rclone move "$@" 2> >(tee -a "$DUPES" | grep -v 'Duplicate object found' >&2); local r=$?; wait; return $r; }
-XFERS=${FILE_TRANSFERS:-1}; [ "$MODE" = archives ] && XFERS=${TRANSFERS:-5}
+XFERS=${FILE_TRANSFERS:-1}; [ "$MODE" = archives ] && XFERS=${TRANSFERS:-10}
 COMMON=(--min-age "$MIN_AGE" --drive-use-trash=false --drive-acknowledge-abuse --order-by name,ascending
         --transfers "$XFERS" --checkers 4 --retries 5 --low-level-retries 20 --delete-empty-src-dirs
         --stats 5m --stats-one-line --log-level NOTICE "${DRY[@]}")
@@ -55,19 +55,21 @@ if [ "$MODE" = files ]; then
   rc_move "$REMOTE" "$ROOT/loose" "${NOARCH[@]}" "${COMMON[@]}" || { echo "rclone move (non-archives) failed" >&2; rc=1; }
 else
   used=$(( $(du -sb "$STAGE" | cut -f1) / 1000000000 ))
-  free=$(df -B1000000000 --output=avail "$STAGE" | tail -1 | tr -d ' ')
-  if [ "$free" -lt "$MIN_FREE_GB" ]; then
-    echo "only ${free} GB free where the stage lives (< MIN_FREE_GB=$MIN_FREE_GB): downloads paused until zips are deleted or moved"
+  free=${FREE_GB:-$(df -B1000000000 --output=avail "$STAGE" | tail -1 | tr -d ' ')}      # FREE_GB: test override
+  room=$(( free - MIN_FREE_GB - XFERS * 5 ))                                                  # what this batch may download without crossing the floor, after the files already in flight
+  bgb=${BATCH%G}; [ "$room" -lt "$bgb" ] && bgb=$room
+  if [ "$room" -lt 10 ]; then
+    echo "only ${free} GB free where the stage lives (floor ${MIN_FREE_GB} GB + ${XFERS} streams in flight): downloads paused until zips are deleted or moved"
     # one push per 6 hours, so a paused pipeline is noticed without a flood
     mark="${XDG_STATE_HOME:-$HOME/.local/state}/strata-takeout/lowspace.notified"; mkdir -p "$(dirname "$mark")"
     if [ -z "$(find "$mark" -mmin -360 2>/dev/null)" ]; then
       "$NTFY_SEND" "Takeout downloads paused: disk almost full" "Only ${free} GB free where the stage and finished zips live (floor ${MIN_FREE_GB} GB). Delete verified zips from done/ to resume." high warning 2>/dev/null; touch "$mark"
     fi
-  elif [ "$used" -ge "$STAGE_MAX" ]; then
-    echo "stage holds ${used} GB (>= $STAGE_MAX): waiting for takeout-extract to drain it"
+  elif [ "$STAGE_MAX" -gt 0 ] && [ "$used" -ge "$STAGE_MAX" ]; then
+    echo "stage holds ${used} GB (>= STAGE_MAX=$STAGE_MAX): waiting for takeout-extract to drain it"
   else
-    echo "archives -> $STAGE (stage ${used} GB, batch $BATCH, $XFERS transfers)"
-    rc_move "$REMOTE" "$STAGE" "${ARCH[@]}" --max-transfer "$BATCH" --cutoff-mode soft "${COMMON[@]}"
+    echo "archives -> $STAGE (stage ${used} GB, ${free} GB free, batch ${bgb}G, $XFERS transfers)"
+    rc_move "$REMOTE" "$STAGE" "${ARCH[@]}" --max-transfer "${bgb}G" --cutoff-mode soft "${COMMON[@]}"
     r=$?; [ $r = 0 ] || [ $r = 8 ] || { echo "rclone move (archives) failed rc=$r" >&2; rc=1; }   # 8 = batch limit reached: normal
   fi
 fi

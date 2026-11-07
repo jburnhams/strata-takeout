@@ -23,7 +23,7 @@ cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user
 systemctl --user enable --now takeout-pull.timer takeout-pull-files.timer takeout-extract.timer takeout-inbox.timer filecat.timer
 sudo DISK_SERIAL=<serial> DISK_MODEL=<model> scripts/setup-exports-disk prepare     # optional: LUKS2 + ext4 data disk at /srv/exports (WIPES the disk; find serial/model with lsblk -dno PATH,SERIAL,MODEL)
 ```
-`done/` (finished archives) may be a symlink to fast storage: if the stage and `done/` are on the same filesystem, moving a zip there is an instant rename instead of a copy. `takeout-pull` pauses archive downloads while the stage's filesystem has less than `MIN_FREE_GB` (default 400) free and sends one `ntfy-send` push per 6 hours.
+`done/` (finished archives) may be a symlink to fast storage: if the stage and `done/` are on the same filesystem, moving a zip there is an instant rename instead of a copy. `takeout-pull` sizes each archive batch to what is free above `MIN_FREE_GB` (default 400, minus 5 GB per stream in flight) so the filesystem never drops below the floor, however many finished zips pile up; when there is no room it pauses and sends one `ntfy-send` push per 6 hours. `STAGE_MAX` (GB waiting in the stage) is an optional extra cap, off by default. Default streams: 10 for archives plus 1 for non-archives (`TRANSFERS`, `FILE_TRANSFERS`).
 
 Paths and limits are environment variables with defaults (`EXPORTS_ROOT=/srv/exports`, `STAGE=~/.cache/takeout-stage`, `STAGE_MAX`, `MIN_FREE_GB`, `BATCH`, `TRANSFERS`, `KEEP_ARCHIVES`, `MIN_AGE`, `SETTLE`); see the header of each script.
 

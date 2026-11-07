@@ -20,7 +20,9 @@ cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user
 systemctl --user enable --now takeout-pull.timer takeout-pull-files.timer takeout-extract.timer filecat.timer
 sudo DISK_SERIAL=<serial> DISK_MODEL=<model> scripts/setup-exports-disk prepare     # optional: LUKS2 + ext4 data disk at /srv/exports (WIPES the disk; find serial/model with lsblk -dno PATH,SERIAL,MODEL)
 ```
-Paths and limits are environment variables with defaults (`EXPORTS_ROOT=/srv/exports`, `STAGE=~/.cache/takeout-stage`, `STAGE_MAX`, `BATCH`, `TRANSFERS`, `KEEP_ARCHIVES`, `MIN_AGE`, `SETTLE`); see the header of each script.
+`done/` (finished archives) may be a symlink to fast storage: if the stage and `done/` are on the same filesystem, moving a zip there is an instant rename instead of a copy. `takeout-pull` pauses archive downloads while the stage's filesystem has less than `MIN_FREE_GB` (default 400) free and sends one `ntfy-send` push per 6 hours.
+
+Paths and limits are environment variables with defaults (`EXPORTS_ROOT=/srv/exports`, `STAGE=~/.cache/takeout-stage`, `STAGE_MAX`, `MIN_FREE_GB`, `BATCH`, `TRANSFERS`, `KEEP_ARCHIVES`, `MIN_AGE`, `SETTLE`); see the header of each script.
 
 ## Develop
 ```bash

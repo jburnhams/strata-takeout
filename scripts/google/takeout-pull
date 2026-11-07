@@ -9,7 +9,7 @@
 #      extracts them oldest export first onto the exports disk and moves each archive to done/, which frees the stage.
 # `rclone move` deletes each Drive file only after the copy is verified (size + hash); --drive-use-trash=false so the space
 # is freed on Drive at once. Files younger than MIN_AGE are skipped (Takeout may still be writing them).
-# Doc: docs/tech/machines/omarchy/jobs/exports-disk.md#google-takeout
+# Doc: README.md and docs/platforms.md
 set -uo pipefail
 REMOTE=${TAKEOUT_REMOTE:-gdrive:Takeout}
 ROOT=${EXPORTS_ROOT:-/srv/exports}/google-takeout

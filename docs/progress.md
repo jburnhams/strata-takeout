@@ -1,7 +1,7 @@
 # strata-takeout progress
 
 ## 2026-11-07: created
-Moved here from `~/.local/bin` on the omarchy box, where it was written the same day while the first full Google Takeout (3.2 TiB, 789 files on Drive) was being pulled. The scripts are unchanged except that the tool paths (`SAFE_EXTRACT`, `FILECAT`) are now configurable. The Python parts (path rules, safe extractor, filecat profile) became a package with tests.
+Moved here from `~/.local/bin` on a home Linux box, where it was written the same day while the first full Google Takeout (3.2 TiB, 789 files on Drive) was being pulled. The scripts are unchanged except that the tool paths (`SAFE_EXTRACT`, `FILECAT`) are now configurable. The Python parts (path rules, safe extractor, filecat profile) became a package with tests.
 
 Decisions:
 - Google first, as scripts; no premature plugin interface (see docs/platforms.md). Port the bash to Python only with tests, not during a live download.

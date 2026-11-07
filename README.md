@@ -18,7 +18,7 @@ Needs rclone (a remote named `gdrive` with full `drive` scope; use your own clie
 scripts/install.sh              # venv at ~/.local/share/strata/venv, tools linked into ~/.local/bin
 cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
 systemctl --user enable --now takeout-pull.timer takeout-pull-files.timer takeout-extract.timer filecat.timer
-sudo scripts/setup-exports-disk prepare     # optional: LUKS2 + ext4 data disk (edit the serial/model at the top first; it wipes the disk)
+sudo DISK_SERIAL=<serial> DISK_MODEL=<model> scripts/setup-exports-disk prepare     # optional: LUKS2 + ext4 data disk at /srv/exports (WIPES the disk; find serial/model with lsblk -dno PATH,SERIAL,MODEL)
 ```
 Paths and limits are environment variables with defaults (`EXPORTS_ROOT=/srv/exports`, `STAGE=~/.cache/takeout-stage`, `STAGE_MAX`, `BATCH`, `TRANSFERS`, `KEEP_ARCHIVES`, `MIN_AGE`, `SETTLE`); see the header of each script.
 

@@ -13,7 +13,7 @@
 # If bsdtar fails (e.g. a file name over 255 bytes) the archive is redone with takeout-extract-safe, which cuts such names and
 # adds a hash so they stay unique; renames go to $ROOT/renamed.tsv (archive, original path, stored path).
 # KEEP_ARCHIVES=0: delete the archive after extraction instead of moving it to done/.
-# Doc: docs/tech/machines/omarchy/jobs/exports-disk.md#google-takeout
+# Doc: README.md and docs/platforms.md
 set -uo pipefail
 SAFE_EXTRACT=${SAFE_EXTRACT:-$HOME/.local/bin/strata-takeout-safe-extract}   # tools from this repo (scripts/install.sh); tests override them
 FILECAT=${FILECAT:-$HOME/.local/bin/filecat}

@@ -84,8 +84,10 @@ def process_manifest(path, d, platform, pdir, exports, notify, log, fetch=None, 
     move(path, unique(os.path.join(exports, platform, 'loose', 'manifests'), os.path.basename(path)))
     if os.path.exists(state): os.remove(state)
     if exhausted:
-        notify(f'Takeout inbox: {platform} export INCOMPLETE', f'{len(exhausted)} of {len(d["data_files"])} files could not be downloaded (links used or expired): {", ".join(exhausted)}. Request a new export.')
-        log(f'  gave up on {len(exhausted)} file(s); request a new export'); return False
+        page = os.path.join(pdir, f'README-download-links-{mf.stamp(d)}.html')       # ignored by the inbox (README*): meant to be opened in a logged-in browser
+        with open(page, 'w', encoding='utf-8') as fh: fh.write(mf.links_page(d, set(exhausted), platform))
+        notify(f'Takeout inbox: {platform} needs a browser download', f'{len(exhausted)} of {len(d["data_files"])} files cannot be fetched without logging in. Open takeouts/{platform}/{os.path.basename(page)} in your browser and click each link; the zips are picked up when saved into that folder.')
+        log(f'  {len(exhausted)} file(s) need a browser; wrote {os.path.basename(page)}'); return True     # handled: the push says what to do; not a failure of the job (no second alert from the unit)
     notify(f'Takeout inbox: {platform}', f'downloaded {len(got)} files from {os.path.basename(path)}; they are extracted on the next run')
     return True
 

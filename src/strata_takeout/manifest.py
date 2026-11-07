@@ -10,7 +10,7 @@ Properties that matter, because these links expire after 24 hours and may die as
   * the saved name is `<export timestamp>_<filename>` (basename only), because the next export has the same file names again;
   * only https links on an allow-listed host are followed (MANIFEST_HOSTS, default claude.ai): a manifest dropped on the share cannot make this machine fetch arbitrary URLs.
 """
-import json, os, re, shutil, time, urllib.parse, urllib.request, zipfile
+import html, json, os, re, shutil, time, urllib.parse, urllib.request, zipfile
 
 DEFAULT_HOSTS = ('claude.ai',)
 UA = 'strata-takeout/0.1 (+https://github.com/jburnhams/strata-takeout)'
@@ -38,11 +38,16 @@ def verify_zip(path):
         with zipfile.ZipFile(path) as z: return z.testzip() is None and len(z.infolist()) > 0
     except (zipfile.BadZipFile, OSError): return False
 
+class NeedsBrowser(IOError):
+    """The link answers with a web page (HTML), not a file: it only works inside a logged-in browser session (claude.ai/export/<id>/download/<token>)."""
+
 def http_fetch(url, dest, timeout=120):
     """One GET, streamed to `dest`; returns (bytes written, Content-Length or None)."""
     req = urllib.request.Request(url, headers={'User-Agent': UA})
-    with urllib.request.urlopen(req, timeout=timeout) as r, open(dest, 'wb') as out:
-        length = r.headers.get('Content-Length'); shutil.copyfileobj(r, out, 1 << 20)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        if 'text/html' in (r.headers.get('Content-Type') or '').lower(): raise NeedsBrowser('the link serves a web page, not a file: open it in a logged-in browser')
+        length = r.headers.get('Content-Length')
+        with open(dest, 'wb') as out: shutil.copyfileobj(r, out, 1 << 20)
     return os.path.getsize(dest), int(length) if length and length.isdigit() else None
 
 def load_state(path):
@@ -74,7 +79,20 @@ def download_all(manifest, dest_dir, hosts=DEFAULT_HOSTS, fetch=http_fetch, allo
             if state_path: save_state(state_path, fetched, attempts)
         except Exception as e:
             if os.path.exists(part): os.remove(part)
-            log(f'  {name}: FAILED ({type(e).__name__}: {str(e)[:100]})'); failed.append(name); attempts[name] = attempts.get(name, 0) + 1
+            log(f'  {name}: FAILED ({type(e).__name__}: {str(e)[:100]})'); failed.append(name)
+            attempts[name] = max_attempts if isinstance(e, NeedsBrowser) else attempts.get(name, 0) + 1          # a page is not going to turn into a file: do not retry
             if attempts[name] >= max_attempts and exhausted is not None: exhausted.append(name)
             if state_path: save_state(state_path, fetched, attempts)
     return done, failed
+
+def links_page(manifest, names, platform='export'):
+    """A small HTML page with a clickable link per file, to open in a browser that is logged in. Contains the one-time links: delete it after use."""
+    st = stamp(manifest); rows = []
+    for f in manifest['data_files']:
+        n = f"{st}_{os.path.basename(f['filename'])}"
+        if n in names: rows.append(f'<li><a href="{html.escape(f["export_url"], quote=True)}">{html.escape(os.path.basename(f["filename"]))}</a> <small>({html.escape(str(f.get("category", "")))})</small></li>')
+    return ('<!doctype html><meta charset="utf-8"><title>Download the %s export</title><body style="font:16px sans-serif;max-width:40em;margin:2em auto">'
+            '<h2>Download the %s export</h2><p>These links only work in a browser where you are <b>logged in</b> to the service (the program that watches this folder cannot log in). '
+            'Click each link once, let the file finish downloading, then save/move the files into this folder (<code>takeouts/%s</code>) and they are picked up automatically. '
+            'The links expire %s and may stop working once used.</p><ol>%s</ol><p><small>This page holds one-time links: delete it afterwards.</small></p>'
+            % (html.escape(platform), html.escape(platform), html.escape(platform), 'about 24 hours after %s' % html.escape(str(manifest.get('created_at', '?'))[:19]), ''.join(rows)))

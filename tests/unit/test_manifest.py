@@ -110,6 +110,28 @@ def test_a_file_that_keeps_failing_is_given_up_once_with_an_alert_instead_of_ret
     def fetch(url, dest): calls.append(url); open(dest, 'wb').write(b'gone'); return 4, 4
     args = dict(settle=0, recheck=0, filecat='true', log=lambda *_: None, fetch=fetch, notify=lambda *a: notes.append(a))
     for _ in range(2): assert inbox.run(str(inb), str(ex), str(done), **args)[1] == 1 and mp.exists()
-    assert inbox.run(str(inb), str(ex), str(done), **args)[1] == 1 and not mp.exists() and (ex / 'claude/loose/manifests/manifest-abc.json').exists()    # third failure: given up
-    assert len(calls) == 3 and notes and 'INCOMPLETE' in notes[-1][0]
+    assert inbox.run(str(inb), str(ex), str(done), **args) == (1, 0) and not mp.exists() and (ex / 'claude/loose/manifests/manifest-abc.json').exists()    # third failure: given up
+    assert len(calls) == 3 and notes and 'needs a browser' in notes[-1][0] and list((inb / 'claude').glob('README-download-links-*.html'))
     assert inbox.run(str(inb), str(ex), str(done), **args) == (0, 0) and len(calls) == 3                          # nothing left to retry
+
+
+def test_a_link_that_serves_a_web_page_is_given_up_at_once_and_a_clickable_links_page_is_written(tmp_path):
+    inb, ex, done = tmp_path / 'inbox', tmp_path / 'ex', tmp_path / 'done'; (inb / 'claude').mkdir(parents=True); mp = inb / 'claude' / 'manifest-abc.json'
+    mp.write_text(json.dumps(man([('conversations', 'https://claude.ai/export/u/download/aaa'), ('projects', 'https://claude.ai/export/u/download/bbb')]))); calls = []; notes = []
+    def fetch(url, dest): calls.append(url); raise mf.NeedsBrowser('web page')
+    args = dict(settle=0, recheck=0, filecat='true', log=lambda *_: None, fetch=fetch, notify=lambda *a: notes.append(a))
+    assert inbox.run(str(inb), str(ex), str(done), **args) == (1, 0) and len(calls) == 2                              # one request per link, then no more; handled, not a failure
+    page = next((inb / 'claude').glob('README-download-links-*.html')).read_text()
+    assert 'href="https://claude.ai/export/u/download/aaa"' in page and 'conversations-000.zip' in page and '<b>logged in</b>' in page
+    assert (ex / 'claude/loose/manifests/manifest-abc.json').exists() and not mp.exists() and len(notes) == 1
+    assert inbox.run(str(inb), str(ex), str(done), **args) == (0, 0) and len(calls) == 2                                # the page is a README: left alone; nothing is requested again
+    (inb / 'claude' / 'conversations-000.zip').write_bytes(zbytes(tmp_path, 'z.zip', {'conversations.json': '[]'}))      # the zip saved by the browser is then picked up as usual
+    assert inbox.run(str(inb), str(ex), str(done), **args) == (1, 0) and (ex / 'claude/tree/conversations.json').exists()
+
+def test_http_fetch_rejects_html_pages(tmp_path):
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self): self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.end_headers(); self.wfile.write(b'<!doctype html><html></html>')
+        def log_message(self, *a): pass
+    srv = http.server.HTTPServer(('127.0.0.1', 0), H); threading.Thread(target=srv.serve_forever, daemon=True).start()
+    with pytest.raises(mf.NeedsBrowser): mf.http_fetch(f'http://127.0.0.1:{srv.server_port}/x', str(tmp_path / 'o.part'))
+    srv.shutdown(); assert not (tmp_path / 'o.part').exists()

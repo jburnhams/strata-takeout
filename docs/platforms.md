@@ -41,6 +41,13 @@ Today Google is a set of scripts (`scripts/google/`) plus the Python parts (`pat
 
 The routes are from general knowledge and must be checked on each first real export. Account names and logins belong in a password manager, never in this repo.
 
+## Lessons from the Claude export (2026-11-07)
+- The claude.ai export is not an archive: it arrives as a small **JSON manifest** (`data_files[]` with `export_url`, `filename`, `category`; eight files: conversations, projects, memories, feedback, design_chats, frames, claude_code_cloud, light_metadata). The instructions say the links expire after 24 hours and may stop working once used.
+- The links are `claude.ai/export/<uuid>/download/<token>`: a **front-end page route**. An unauthenticated GET returns the web app's HTML (status 200, `text/html`, Cloudflare), the logged-in browser then fetches the zip. So it cannot be automated without the user's browser session, and extracting a session cookie or calling the internal API is fragile and not something to do.
+- What the pipeline does instead (`manifest.py`): one request per link, the response is accepted only if it is a complete, valid zip; an HTML response is recognised at once ("needs a browser"), the files are not retried, and `README-download-links-<stamp>.html` (a page of clickable links) is written into the platform's inbox folder with one push saying what to do. The user opens it in a logged-in browser, saves the zips into the same folder, and the inbox ingests them as usual. Saved names are `<export timestamp>_<file>` when the pipeline downloads, plain `conversations-000.zip` when a browser does (the next export reuses those names; the inbox keeps both, `.1` suffix).
+- The downloader stays for platforms whose links are direct file URLs: https only, host allow-list (`MANIFEST_HOSTS`), a state file so a used link is never requested again even after its file was filed, three failures and it gives up (alert once), a run lock so a manual and a timer run never use the same one-time link.
+- Mistake worth remembering: the first version deleted a rejected response, so the first failure could not be diagnosed without spending another request on a possibly one-use link. A rejected download should keep a few bytes of evidence (status, content type, first bytes).
+
 ## Lessons from the first run (Google, 2026-11-07)
 - rclone move + `--drive-use-trash=false` frees Drive space as files land; use `--order-by name` and extract oldest export first.
 - Drive allows several files with the same name; rclone skips them silently. `rclone dedupe --dedupe-mode rename` renames them apart (the **newer** file gets `-1`), so extract by modification time and wait for all twins.

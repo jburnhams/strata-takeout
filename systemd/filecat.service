@@ -4,8 +4,7 @@ OnFailure=notify-failure@%n.service
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/filecat run --seconds 1500
+ExecStart=%h/.local/bin/filecat run --seconds 1500 --stop-when "pgrep -f '[b]sdtar -xf'"
 Nice=15
-IOSchedulingClass=best-effort
-IOSchedulingPriority=7
+IOSchedulingClass=idle
 TimeoutStartSec=2h

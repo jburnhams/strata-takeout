@@ -1,0 +1,11 @@
+[Unit]
+Description=filecat: scan collections, record extracted archives, SHA-256 new files
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/filecat run --seconds 1500
+Nice=15
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=2h

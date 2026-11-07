@@ -1,0 +1,12 @@
+# Repository Guidelines
+
+strata-takeout: download, extract and catalogue the data exports of online services (Google Takeout first; Meta, X, Amazon, Apple, Reddit, Flickr, ... planned, see `docs/platforms.md`). Pairs with [strata-filecat](https://github.com/jburnhams/strata-filecat) (catalogue, hash index, duplicate finder).
+
+- Python (standard library only) in `src/strata_takeout/`: `paths.py` (what an archive entry name becomes on disk: leading `Takeout/` dropped, over-long names cut + hashed, nested `Drive/Takeout/` skipped), `safe_extract.py` (extractor that never fails on names; CLI `strata-takeout-safe-extract`), `profile.py` (the `takeout` filecat profile, entry point group `filecat.profiles`), `platforms/` (per-platform Python code when needed).
+- Scripts: `scripts/google/takeout-pull` (rclone move from Drive; `--files` for non-archives, default for archives staged on fast disk in capped batches), `scripts/google/takeout-extract` (oldest export first, gated while downloading, bsdtar with fallback to the safe extractor, archives to `done/`, twins and nested rules, records in filecat), `scripts/setup-exports-disk` (LUKS2 + ext4 data disk, destructive, asks for the serial), `scripts/install.sh`. systemd units in `systemd/`.
+- Tests: `tests/unit` (paths, extractor, profile) and `tests/integration/test_takeout_extract.py` (runs the real bash script with fake exports; needs bsdtar). Hermetic: temporary directories, `SAFE_EXTRACT`/`FILECAT` overridden. Commands: `pip install -r requirements-test.txt && pip install -e .`, `pytest`, `ruff check src tests`.
+- Ordering rule that matters: archives of one platform are extracted **oldest export first** (so newer overwrites older); while a download is running only exports <= the oldest partial are extracted. Same-export files that were renamed apart (`dupes.tsv`) wait for all twins and go by modification time. Do not break these without a test.
+- Editing a script that a systemd unit may be running: replace the file (write a temp file, then `mv`), never rewrite it in place: bash reads scripts incrementally.
+- Deleting from the remote is permanent and happens only after rclone verified the local copy. Never add a code path that deletes remote data before that.
+- Style: dense, comment-the-why, long lines are fine (ruff line-length 400). No secrets in the repo; rclone config and account logins live outside it.
+- Notes and decisions: `docs/progress.md`. Machine-level job docs are in the private `docs` repo (`tech/machines/omarchy/jobs/exports-disk.md`, `filecat.md`).

@@ -1,0 +1,12 @@
+[Unit]
+Description=Pull finished Google Takeout archives from Drive onto the exports disk, then extract
+After=network-online.target
+Wants=network-online.target
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/takeout-pull
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=infinity

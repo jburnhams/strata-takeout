@@ -1,0 +1,79 @@
+#!/bin/bash
+# takeout-extract: extract finished Google Takeout archives, oldest export first, then move each to done/.
+#   takeout-extract [--dry-run]
+# stage (NVMe, ~/.cache/takeout-stage) and archives/ -> (extract into /srv/exports/gt/, the leading Takeout/ dropped) -> done/   (loose non-archive files, e.g. .mp4/.mbox, go to loose/)
+# Order: export timestamp in the name (takeout-20260209T204735Z-...), then part number, so a newer export overwrites an older one.
+# While `rclone move` is running it only extracts archives whose export is <= the oldest export still downloading
+# (.partial); rclone starts files in name order, so nothing older can arrive later. Without a partial of an archive
+# in flight it extracts nothing while the download runs (it is between files or listing). Once the download has
+# finished it extracts everything left. A file is only taken once its ctime is older than SETTLE seconds, so rclone's
+# post-download hash check has finished (a failed check deletes the file).
+# Entries under Drive/Takeout/ (earlier Takeout deliveries that the Drive export re-packs) are skipped: they are copies of other
+# exports. The archive itself is kept in done/, so nothing is lost.
+# If bsdtar fails (e.g. a file name over 255 bytes) the archive is redone with takeout-extract-safe, which cuts such names and
+# adds a hash so they stay unique; renames go to $ROOT/renamed.tsv (archive, original path, stored path).
+# KEEP_ARCHIVES=0: delete the archive after extraction instead of moving it to done/.
+# Doc: docs/tech/machines/omarchy/jobs/exports-disk.md#google-takeout
+set -uo pipefail
+SAFE_EXTRACT=${SAFE_EXTRACT:-$HOME/.local/bin/strata-takeout-safe-extract}   # tools from this repo (scripts/install.sh); tests override them
+FILECAT=${FILECAT:-$HOME/.local/bin/filecat}
+ROOT=${EXPORTS_ROOT:-/srv/exports}/google-takeout
+SETTLE=${SETTLE:-180}; KEEP_ARCHIVES=${KEEP_ARCHIVES:-1}
+DRY=0; [ "${1:-}" = --dry-run ] && DRY=1
+exec 8>"${XDG_RUNTIME_DIR:-/tmp}/takeout-extract.lock"
+flock -n 8 || { echo "takeout-extract already running"; exit 0; }
+if [ -z "${EXPORTS_ROOT:-}" ] && ! mountpoint -q /srv/exports; then echo "/srv/exports is not mounted" >&2; exit 1; fi
+STAGE=${STAGE:-$HOME/.cache/takeout-stage}
+A="$ROOT/archives"; X=${EXTRACT_ROOT:-${EXPORTS_ROOT:-/srv/exports}/gt}; DN="$ROOT/done"; LO="$ROOT/loose"; M="$ROOT/.extracted"
+mkdir -p "$STAGE" "$A" "$X" "$DN" "$LO" "$M"
+# duplicate-named files on Drive were renamed to NAME-1.zip, NAME-2.zip by takeout-pull (list in $ROOT/dupes.tsv: NAME.zip<TAB>count).
+# They are different data from the same export: extract them only once all twins are here, and oldest modification time first.
+declare -A DUP; [ -f "$ROOT/dupes.tsv" ] && while IFS=$'\t' read -r dn dk; do [ -n "$dn" ] && DUP["$dn"]=$dk; done < "$ROOT/dupes.tsv"
+twins_here() {   # $1 = file name; true unless it is a renamed duplicate whose twins are not all present yet
+  local b=$1 base ext k i
+  [[ $b =~ ^(.*)-([0-9]+)\.(zip|tgz|tar)$ ]] || return 0
+  base=${BASH_REMATCH[1]}; ext=${BASH_REMATCH[3]}; k=${DUP["$base.$ext"]:-}
+  [ -n "$k" ] || return 0
+  for ((i=1;i<=k;i++)); do [ -e "$STAGE/$base-$i.$ext" ] || [ -e "$A/$base-$i.$ext" ] || [ -e "$DN/$base-$i.$ext" ] || return 1; done
+}
+tsof() { grep -oE '[0-9]{8}T[0-9]{6}Z' <<<"${1##*/}" | head -1; }
+
+running=${TAKEOUT_RUNNING:-}
+if [ -z "$running" ]; then pgrep -f "rclone move .*(takeout-stage|google-takeout/archives)" >/dev/null && running=1 || running=0; fi
+limit=""                                   # highest export timestamp allowed; empty = no limit
+if [ "$running" = 1 ]; then
+  limit=$(find "$STAGE" "$A" -maxdepth 1 -name '*.partial' -printf '%f\n' | while read -r n; do tsof "$n"; done | sort | head -1)
+  if [ -z "$limit" ]; then echo "download running, no archive in flight yet: waiting"; exit 0; fi
+fi
+
+now=$(date +%s); rc=0; n=0
+while IFS=$'\t' read -r ts part f; do
+  b=${f##*/}
+  [ $((now - $(stat -c %Z "$f"))) -ge "$SETTLE" ] || continue
+  case "$b" in
+    *.zip|*.tgz|*.tar.gz|*.tar)
+      [ -n "$limit" ] && [[ "$ts" > "$limit" ]] && continue
+      twins_here "$b" || { echo "waiting for the twin(s) of $b"; continue; }
+      mk="$M/$(echo -n "$b" | tr '/' '_').done"
+      if [ "$DRY" = 1 ]; then echo "would extract $b (ts $ts)"; continue; fi
+      if [ ! -e "$mk" ]; then
+        # bsdtar reads zip/tar/tgz alike; --strip-components=1 drops the leading "Takeout/" to keep paths short (limits: 255 per name, 4096 per path, and 260 on Windows shares)
+        if ! bsdtar -xf "$f" -C "$X" --strip-components=1 --no-same-owner --no-same-permissions --exclude "Takeout/Drive/Takeout" --exclude "Takeout/Drive/Takeout/*" 2>"$M/bsdtar.err"; then
+          # most likely a name the filesystem refuses (>255 bytes): redo with names cut + hashed, renames logged in $ROOT/renamed.tsv
+          echo "bsdtar failed on $b ($(head -c 200 "$M/bsdtar.err" | head -1)); retrying with takeout-extract-safe" >&2
+          $SAFE_EXTRACT "$f" "$X" "$ROOT/renamed.tsv" || { echo "extract failed: $b" >&2; rc=1; continue; }
+        fi
+        touch "$mk"; n=$((n+1)); echo "extracted $b"
+        $FILECAT ingest-archive "${FILECAT_COLLECTION:-google-takeout}" "$f" >/dev/null 2>&1 || echo "catalogue: could not record $b (the filecat timer will pick it up)" >&2
+      fi
+      if [ "$KEEP_ARCHIVES" = 0 ]; then rm -f "$f"; else mv -f "$f" "$DN/.$b.part" && mv -f "$DN/.$b.part" "$DN/$b"; fi ;;
+    *) [ "$DRY" = 1 ] && echo "would move loose $b" || { mv -f "$f" "$LO/.$b.part" && mv -f "$LO/.$b.part" "$LO/$b"; } ;;
+  esac
+done < <(find "$STAGE" "$A" -maxdepth 1 -type f ! -name '*.partial' -printf '%T@\t%p\n' | while IFS=$'\t' read -r mt f; do
+           b=${f##*/}; ts=$(tsof "$b"); [ -n "$ts" ] || ts=00000000T000000Z
+           part=$(grep -oE '[0-9]+\.(zip|tgz|tar|tar\.gz)$' <<<"$b" | grep -oE '^[0-9]+'); printf '%s\t%015d\t%08d\t%s\n' "$ts" "${mt%.*}" "$((10#${part:-0}))" "$f"
+         done | sort -t$'\t' -k1,1 -k2,2n -k3,3n | cut -f1,3,4)
+if [ "$n" -gt 0 ] && [ -z "${EXPORTS_ROOT:-}" ]; then
+  ntfy-send "Takeout: $n archive(s) extracted" "$(ls "$STAGE" "$A" 2>/dev/null | grep -c zip) waiting, $(ls "$DN" | wc -l) done. Disk: $(df -h --output=avail /srv/exports | tail -1 | tr -d ' ') free." low floppy_disk
+fi
+exit $rc

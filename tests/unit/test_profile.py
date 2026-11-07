@@ -1,0 +1,19 @@
+import os
+from strata_takeout.profile import Takeout
+
+def test_map_and_meta():
+    p = Takeout({}, '/srv/exports/gt')
+    assert p.meta('takeout-20260209T204735Z-12-078.zip') == '20260209T204735Z' and p.meta('other.zip') is None
+    assert p.map('Takeout/Drive/a.txt') == ('ok', 'Drive/a.txt', None) or p.map('Takeout/Drive/a.txt')[:2] == ('ok', 'Drive/a.txt')
+    assert p.map('Takeout/Drive/Takeout/x.zip') == ('skip', 'Takeout/Drive/Takeout/x.zip', None)
+    kind, rel, orig = p.map('Takeout/Drive/' + 'q' * 300)
+    assert kind == 'ok' and '~' in rel and orig.endswith('q' * 300)
+    assert p.map('Takeout/' + '/'.join(['d'] * 3000))[0] == 'error'
+
+def test_pending_archives_in_extraction_order(tmp_path):
+    done, mk = tmp_path / 'done', tmp_path / 'mk'; done.mkdir(); mk.mkdir()
+    for i, n in enumerate(['b.zip', 'a.zip', 'c.tgz']):
+        (done / n).write_bytes(b'x'); (mk / (n + '.done')).write_text(''); os.utime(mk / (n + '.done'), (1000 + i, 1000 + i))
+    (done / '.hidden.zip').write_bytes(b'x'); (done / 'notes.txt').write_bytes(b'x')
+    assert [os.path.basename(p) for p in Takeout.pending_archives({'done_dir': str(done), 'marker_dir': str(mk)})] == ['b.zip', 'a.zip', 'c.tgz']
+    assert Takeout.pending_archives({}) == [] and Takeout.pending_archives({'done_dir': str(tmp_path / 'nope')}) == []

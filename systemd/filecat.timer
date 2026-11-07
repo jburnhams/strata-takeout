@@ -1,0 +1,9 @@
+[Unit]
+Description=filecat: catalogue and hash new files (5 min after each run)
+
+[Timer]
+OnBootSec=10min
+OnUnitInactiveSec=5min
+
+[Install]
+WantedBy=timers.target

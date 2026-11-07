@@ -1,0 +1,9 @@
+[Unit]
+Description=Check Drive for new Google Takeout archives every 2 minutes (batches)
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=2min
+
+[Install]
+WantedBy=timers.target

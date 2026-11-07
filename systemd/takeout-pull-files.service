@@ -1,0 +1,12 @@
+[Unit]
+Description=Pull non-archive Google Takeout files (videos, mbox) from Drive straight to the exports disk
+After=network-online.target
+Wants=network-online.target
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/takeout-pull --files
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=infinity

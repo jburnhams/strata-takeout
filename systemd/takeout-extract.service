@@ -1,0 +1,9 @@
+[Unit]
+Description=Extract finished Google Takeout archives (oldest first), move them to done/
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/takeout-extract
+Nice=10
+TimeoutStartSec=infinity

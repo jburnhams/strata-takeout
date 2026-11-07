@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "strata-takeout"
+version = "0.1.0"
+description = "Download, extract and catalogue data exports from cloud platforms (Google Takeout first)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []                      # standard library only; the scripts use rclone, bsdtar and (optionally) strata-filecat
+
+[project.scripts]
+strata-takeout-safe-extract = "strata_takeout.safe_extract:main"
+
+[project.entry-points."filecat.profiles"]
+takeout = "strata_takeout.profile:Takeout"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests/unit", "tests/integration"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 400
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]

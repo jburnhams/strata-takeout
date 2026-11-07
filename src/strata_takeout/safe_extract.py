@@ -1,4 +1,4 @@
-"""strata-takeout-safe-extract ARCHIVE DEST_DIR [MAP_FILE]
+"""strata-takeout-safe-extract ARCHIVE DEST_DIR [MAP_FILE] [--strip N] [--nested A/B]
 
 Extract a Takeout zip/tar/tgz into DEST_DIR, dropping the leading top-level directory, renaming anything the filesystem would refuse (see
 paths.py) and skipping nested earlier exports (Drive/Takeout/), so extraction never fails on names. Every rename is appended to MAP_FILE as
@@ -6,15 +6,15 @@ paths.py) and skipping nested earlier exports (Drive/Takeout/), so extraction ne
 (bsdtar is faster and handles the normal case; it exits 1 on names over 255 bytes). Later archives overwrite earlier ones; links and devices are skipped.
 """
 import os, shutil, sys, tarfile, time, zipfile
-from .paths import clean_parts, safe_parts
+from .paths import NESTED, clean_parts, safe_parts
 
-def extract(arch, dest, mapf=None, err=None):
+def extract(arch, dest, mapf=None, err=None, strip=1, nested=NESTED):
     err = err or sys.stderr; dest = os.path.abspath(dest); renames, failed = [], 0
 
     def target(name):
-        parts = safe_parts(name, dest)
+        parts = safe_parts(name, dest, nested, strip)
         if parts is None: return None
-        orig = clean_parts(name)[1:]
+        orig = clean_parts(name)[strip:]
         if parts != orig: renames.append((os.path.basename(arch), '/'.join(orig), '/'.join(parts)))
         return os.path.join(dest, *parts) if parts else None
 
@@ -50,9 +50,13 @@ def extract(arch, dest, mapf=None, err=None):
     return failed
 
 def main(argv=None):
-    a = sys.argv[1:] if argv is None else argv
-    if len(a) not in (2, 3): sys.exit(__doc__)
-    sys.exit(1 if extract(a[0], a[1], a[2] if len(a) > 2 else None) else 0)
+    import argparse
+    ap = argparse.ArgumentParser(prog='strata-takeout-safe-extract', description=__doc__.split('\n\n')[0])
+    ap.add_argument('archive'); ap.add_argument('dest'); ap.add_argument('map', nargs='?')
+    ap.add_argument('--strip', type=int, default=1, help='leading path components to drop (default 1: Takeout/)')
+    ap.add_argument('--nested', default='/'.join(NESTED), help='path (A/B) whose entries are skipped; empty = skip nothing (default Drive/Takeout)')
+    a = ap.parse_args(argv)
+    sys.exit(1 if extract(a.archive, a.dest, a.map, strip=a.strip, nested=tuple(p for p in a.nested.split('/') if p)) else 0)
 
 if __name__ == '__main__':
     main()

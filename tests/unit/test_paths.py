@@ -28,3 +28,8 @@ def test_safe_parts_shortens_long_components_and_deep_paths():
 
 def test_safe_parts_gives_up_on_impossible_paths():
     with pytest.raises(OSError): safe_parts('Takeout/' + '/'.join(['d'] * 3000), '/srv/gt')                   # thousands of 1-byte directories cannot be shortened
+
+def test_strip_and_nested_are_configurable():
+    assert safe_parts('Takeout/Drive/a.txt', '/d', strip=0) == ['Takeout', 'Drive', 'a.txt']
+    assert safe_parts('export/Drive/Takeout/x.zip', '/d', nested=(), strip=1) == ['Drive', 'Takeout', 'x.zip']              # nothing is skipped when nested is empty
+    assert safe_parts('export/Backups/old/x.zip', '/d', nested=('Backups', 'old'), strip=1) is None

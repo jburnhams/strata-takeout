@@ -12,9 +12,11 @@ dependencies = []                      # standard library only; the scripts use 
 
 [project.scripts]
 strata-takeout-safe-extract = "strata_takeout.safe_extract:main"
+strata-takeout-inbox = "strata_takeout.inbox:main"
 
 [project.entry-points."filecat.profiles"]
 takeout = "strata_takeout.profile:Takeout"
+export = "strata_takeout.profile:Export"
 
 [tool.setuptools.packages.find]
 where = ["src"]

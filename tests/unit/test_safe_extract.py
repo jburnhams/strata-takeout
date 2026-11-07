@@ -46,3 +46,9 @@ def test_main_usage_and_exit_code(tmp_path, capsys):
     z = mk(tmp_path / 'a.zip', {'Takeout/a.txt': 'x'})
     with pytest.raises(SystemExit) as e: main([z, str(tmp_path / 'o')])
     assert e.value.code == 0
+
+def test_cli_strip_and_nested_options(tmp_path):
+    import pytest
+    z = mk(tmp_path / 'a.zip', {'top/Drive/Takeout/n.zip': 'n', 'top/keep.txt': 'k'})
+    with pytest.raises(SystemExit) as e: main([z, str(tmp_path / 'o'), '--strip', '0', '--nested', ''])
+    assert e.value.code == 0 and files_under(tmp_path / 'o') == ['top/Drive/Takeout/n.zip', 'top/keep.txt']

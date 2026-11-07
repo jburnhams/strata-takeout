@@ -8,6 +8,9 @@ An export has three stages. A platform plugin supplies the first two; the rest i
 
 Shared, platform-independent: staging on fast disk with a size cap and batches, the safe extractor for over-long names, "twin" handling for duplicate names, notifications, systemd units, the install script.
 
+## The inbox (works for every platform today)
+`strata-takeout-inbox` ingests anything dropped into `<inbox>/<platform>/` (see the README). It is the universal fetch: the human is the fetcher. Per-platform automation (rclone for cloud-drive delivery, API clients, readiness detection) is an upgrade on top, and platform-specific path rules or quirks are added as a filecat profile plus an `export`-style config (`strip`, `nested`).
+
 ## Plugin contract (to settle when the second platform arrives)
 Today Google is a set of scripts (`scripts/google/`) plus the Python parts (`paths.py`, `safe_extract.py`, `profile.py`). When Meta/X/Amazon follow, extract what they share before generalising: do not design the interface from one example. Expected shape:
 - `fetch`: a command that moves finished archives into the staging dir (and removes them remotely only after verification); exit non-zero on failure.

@@ -24,11 +24,11 @@ def clean_parts(name):
     """Components of an archive entry name without empty, '.' and '..' parts (an archive can never write outside its destination)."""
     return [p for p in name.replace('\\', '/').split('/') if p not in ('', '.', '..')]
 
-def safe_parts(name, dest, nested=NESTED):
-    """Stored path components for an archive entry, below `dest`. The leading top-level directory (Takeout/) is dropped.
-    Returns None for entries under the nested earlier-exports directory; raises OSError if the path cannot be made short enough."""
-    parts = clean_parts(name)[1:]
-    if tuple(parts[:len(nested)]) == tuple(nested): return None
+def safe_parts(name, dest, nested=NESTED, strip=1):
+    """Stored path components for an archive entry, below `dest`. The first `strip` components (Takeout/) are dropped.
+    Returns None for entries under the nested earlier-exports directory (`nested`, empty = none); raises OSError if the path cannot be made short enough."""
+    parts = clean_parts(name)[strip:]
+    if nested and tuple(parts[:len(nested)]) == tuple(nested): return None
     parts = [shorten(p) if blen(p) > NAME_LIMIT else p for p in parts]
     while parts and blen(dest) + 1 + sum(blen(p) + 1 for p in parts) > PATH_LIMIT:
         i = max(range(len(parts)), key=lambda k: blen(parts[k]))

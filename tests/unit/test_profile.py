@@ -17,3 +17,14 @@ def test_pending_archives_in_extraction_order(tmp_path):
     (done / '.hidden.zip').write_bytes(b'x'); (done / 'notes.txt').write_bytes(b'x')
     assert [os.path.basename(p) for p in Takeout.pending_archives({'done_dir': str(done), 'marker_dir': str(mk)})] == ['b.zip', 'a.zip', 'c.tgz']
     assert Takeout.pending_archives({}) == [] and Takeout.pending_archives({'done_dir': str(tmp_path / 'nope')}) == []
+
+def test_export_profile_keeps_the_top_folder_and_skips_nothing_by_default():
+    from strata_takeout.profile import Export
+    p = Export({}, '/srv/exports/meta/tree')
+    assert p.map('facebook-jon/posts/a.json') == ('ok', 'facebook-jon/posts/a.json', None) and p.map('x/Drive/Takeout/y.zip')[0] == 'ok'
+    q = Export({'strip': '1', 'nested': 'Backups/old'}, '/d'); assert q.map('top/Backups/old/x') [0] == 'skip' and q.map('top/a')[1] == 'a'
+
+def test_export_profile_pending_archives_come_from_done_dir_by_mtime(tmp_path):
+    from strata_takeout.profile import Export
+    for i, n in enumerate(['b.zip', 'a.zip']): (tmp_path / n).write_bytes(b'x'); os.utime(tmp_path / n, (1000 + i, 1000 + i))
+    assert [os.path.basename(x) for x in Export.pending_archives({'done_dir': str(tmp_path)})] == ['b.zip', 'a.zip']

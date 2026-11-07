@@ -12,12 +12,15 @@ Drive "Takeout" --rclone move--> stage (NVMe, capped) --takeout-extract--> /srv/
 - **Catalogue**: each extracted archive is recorded in [strata-filecat](https://github.com/jburnhams/strata-filecat) via the `takeout` profile (`strata_takeout.profile`): size, CRC32, later SHA-256, versions per path, duplicates.
 - Alerts through `OnFailure=` on each systemd unit (and a quiet push when archives land).
 
+## Other platforms: the inbox
+Every platform without an automatic fetch starts here. Drop the export archive into a per-platform folder of an inbox (on omarchy: `~/dropbox/takeouts/<platform>/`, which is an SMB share, so a phone or laptop can drop files straight in). `strata-takeout-inbox` (timer, every 5 minutes) waits until the upload has stopped growing, extracts archives oldest first into `<exports>/<platform>/tree/`, moves other files and folders to `<exports>/<platform>/loose/`, files the original archive under `done/<platform>/` and records it in a filecat collection named after the platform (profile `export`: keeps the archive's own top folder, skips nothing). A broken archive stays in the inbox and raises an alert. An archive dropped in `google/` joins the Google pipeline instead. Automatic fetching and platform-specific path rules are added per platform later (see [docs/platforms.md](docs/platforms.md)); the inbox keeps working for every platform in the meantime.
+
 ## Install
 Needs rclone (a remote named `gdrive` with full `drive` scope; use your own client id, rclone's shared one is rate limited), bsdtar (`libarchive`), and uv.
 ```bash
 scripts/install.sh              # venv at ~/.local/share/strata/venv, tools linked into ~/.local/bin
 cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
-systemctl --user enable --now takeout-pull.timer takeout-pull-files.timer takeout-extract.timer filecat.timer
+systemctl --user enable --now takeout-pull.timer takeout-pull-files.timer takeout-extract.timer takeout-inbox.timer filecat.timer
 sudo DISK_SERIAL=<serial> DISK_MODEL=<model> scripts/setup-exports-disk prepare     # optional: LUKS2 + ext4 data disk at /srv/exports (WIPES the disk; find serial/model with lsblk -dno PATH,SERIAL,MODEL)
 ```
 `done/` (finished archives) may be a symlink to fast storage: if the stage and `done/` are on the same filesystem, moving a zip there is an instant rename instead of a copy. `takeout-pull` pauses archive downloads while the stage's filesystem has less than `MIN_FREE_GB` (default 400) free and sends one `ntfy-send` push per 6 hours.

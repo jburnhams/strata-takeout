@@ -48,6 +48,9 @@ The routes are from general knowledge and must be checked on each first real exp
 - The downloader stays for platforms whose links are direct file URLs: https only, host allow-list (`MANIFEST_HOSTS`), a state file so a used link is never requested again even after its file was filed, three failures and it gives up (alert once), a run lock so a manual and a timer run never use the same one-time link.
 - Mistake worth remembering: the first version deleted a rejected response, so the first failure could not be diagnosed without spending another request on a possibly one-use link. A rejected download should keep a few bytes of evidence (status, content type, first bytes).
 
+## CORRECTION (2026-11-08): nested earlier exports are not copies
+`Drive/Takeout/` inside a Drive export holds earlier Takeout zips, and the extractor skips it on the assumption that they duplicate separately downloaded exports. **Measured on a real 3 TB export, that assumption is false**: none of 311 nested zips matched a downloaded archive by size, and in a sample of 12 only 19% of the bytes (69% of the entries, mostly small files) were already in the extracted tree; the rest, mostly large files, exist only nested. Do not skip them (or at least do not delete the wrapper archives): extract nested zips with newest-export-wins per path and keep `current` in the catalogue by export timestamp. Before relying on any "this is a duplicate" rule, verify it against the catalogue (path + CRC), and keep the original archives until that is done.
+
 ## Lessons from the first run (Google, 2026-11-07)
 - rclone move + `--drive-use-trash=false` frees Drive space as files land; use `--order-by name` and extract oldest export first.
 - Drive allows several files with the same name; rclone skips them silently. `rclone dedupe --dedupe-mode rename` renames them apart (the **newer** file gets `-1`), so extract by modification time and wait for all twins.

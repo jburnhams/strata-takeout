@@ -7,12 +7,12 @@ paths.py) and skipping nested earlier exports (Drive/Takeout/), so extraction ne
 """
 import os, shutil, sys, tarfile, time, zipfile
 from .paths import NESTED, clean_parts, safe_parts
-
-FILE_SUFFIX = '~file'          # appended to a file whose path is also a directory (file and folder with the same name)
+from .placer import FILE_SUFFIX, Placer  # noqa: F401  (FILE_SUFFIX re-exported)
 
 def extract(arch, dest, mapf=None, err=None, strip=1, nested=NESTED):
     err = err or sys.stderr; dest = os.path.abspath(dest); renames, failed = [], 0
-    os.makedirs(dest, exist_ok=True)
+    placer = Placer(dest, lambda old, new: renames.append((os.path.basename(arch), old, new)))
+    ensure_dir, put = (lambda d: placer.ensure_dir(d) if os.path.abspath(d) != dest else None), (lambda path, src, mtime: placer.put(path, src, mtime))
 
     def target(name):
         parts = safe_parts(name, dest, nested, strip)
@@ -20,27 +20,6 @@ def extract(arch, dest, mapf=None, err=None, strip=1, nested=NESTED):
         orig = clean_parts(name)[strip:]
         if parts != orig: renames.append((os.path.basename(arch), '/'.join(orig), '/'.join(parts)))
         return os.path.join(dest, *parts) if parts else None
-
-    def note(old, new):
-        renames.append((os.path.basename(arch), os.path.relpath(old, dest), os.path.relpath(new, dest)))
-
-    def ensure_dir(d):
-        """mkdir -p, but a file squatting on a directory name is moved aside to `<name>~file` (the directory has children, so it keeps the name)."""
-        rel = os.path.relpath(d, dest)
-        if rel == '.': os.makedirs(d, exist_ok=True); return
-        cur = dest
-        for part in rel.split(os.sep):
-            cur = os.path.join(cur, part)
-            if os.path.lexists(cur) and not os.path.isdir(cur):
-                os.replace(cur, cur + FILE_SUFFIX); note(cur, cur + FILE_SUFFIX)
-            if not os.path.isdir(cur): os.mkdir(cur)
-
-    def put(path, src, mtime):
-        ensure_dir(os.path.dirname(path))
-        if os.path.isdir(path):                                                     # Drive allows a file and a folder with one name: the folder wins, the file is stored beside it
-            note(path, path + FILE_SUFFIX); path += FILE_SUFFIX
-        with open(path, 'wb') as out: shutil.copyfileobj(src, out, 1 << 20)
-        if mtime: os.utime(path, (mtime, mtime))
 
     if zipfile.is_zipfile(arch):
         with zipfile.ZipFile(arch) as z:

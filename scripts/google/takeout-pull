@@ -27,6 +27,8 @@ if [ -z "${EXPORTS_ROOT:-}" ] && ! mountpoint -q /srv/exports; then echo "/srv/e
 [[ $REMOTE == *:* ]] && { rclone lsd "${REMOTE%%:*}:" >/dev/null 2>&1 || { echo "rclone remote ${REMOTE%%:*}: not configured or auth failed" >&2; exit 1; }; }
 if ! rclone lsf "$REMOTE" >/dev/null 2>&1; then echo "no $REMOTE folder on Drive: nothing to do"; exit 0; fi
 mkdir -p "$ROOT/loose" "$STAGE"
+# Nothing on Drive at all: say so and stop, before any free-space message (a full disk is irrelevant when there is nothing left to download)
+if [ -z "$(rclone lsf "$REMOTE" 2>/dev/null | head -1)" ]; then echo "nothing left on $REMOTE: the download is complete"; exit 0; fi
 ARCH=(--include '*.zip' --include '*.tgz' --include '*.tar.gz' --include '*.tar')
 NOARCH=(--exclude '*.zip' --exclude '*.tgz' --exclude '*.tar.gz' --exclude '*.tar')
 DUPES=$(mktemp); trap 'rm -f "$DUPES"' EXIT

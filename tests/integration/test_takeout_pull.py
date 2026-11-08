@@ -9,7 +9,7 @@ SCRIPT = os.path.join(REPO, 'scripts/google/takeout-pull')
 @pytest.fixture
 def env(tmp_path):
     bin_ = tmp_path / 'bin'; bin_.mkdir(); log = tmp_path / 'rclone.log'
-    (bin_ / 'rclone').write_text(f'#!/bin/bash\necho "$@" >> {log}\ncase "$1" in lsd|lsf|dedupe|move) exit 0;; esac\nexit 0\n'); (bin_ / 'rclone').chmod(0o755)
+    (bin_ / 'rclone').write_text(f'#!/bin/bash\necho "$@" >> {log}\ncase "$1" in lsf) [ -n "${{RCLONE_EMPTY:-}}" ] || echo a.zip;; esac; exit 0\nexit 0\n'); (bin_ / 'rclone').chmod(0o755)
     (bin_ / 'ntfy').write_text(f'#!/bin/bash\necho "$@" >> {tmp_path}/ntfy.log\n'); (bin_ / 'ntfy').chmod(0o755)
     e = dict(os.environ, PATH=f'{bin_}:{os.environ["PATH"]}', EXPORTS_ROOT=str(tmp_path / 'ex'), STAGE=str(tmp_path / 'stage'), XDG_RUNTIME_DIR=str(tmp_path), XDG_STATE_HOME=str(tmp_path / 'state'), NTFY_SEND=str(bin_ / 'ntfy'), MIN_FREE_GB='0', FREE_GB='3000')
     def run(*args, **kw): return subprocess.run(['bash', SCRIPT, *args], env={**e, **kw}, capture_output=True, text=True, timeout=60)
@@ -48,3 +48,8 @@ def test_dry_run_is_passed_to_rclone(env):
 def test_duplicate_names_are_renamed_apart_before_moving(env):
     env.run(); first = env.log.read_text().splitlines(); idx = [i for i, l in enumerate(first) if l.startswith('dedupe ')]
     assert idx and idx[0] < [i for i, l in enumerate(first) if l.startswith('move ')][0] and '--dedupe-mode rename' in first[idx[0]]
+
+
+def test_an_empty_drive_folder_means_done_not_disk_full(env):
+    r = env.run(RCLONE_EMPTY='1', MIN_FREE_GB='999999999')                                                   # even with the disk "full", an empty Drive is just "complete"
+    assert r.returncode == 0 and 'download is complete' in r.stdout and 'paused' not in r.stdout and not env.ntfy.exists() and moves(env) == []

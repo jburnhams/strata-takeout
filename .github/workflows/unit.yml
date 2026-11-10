@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+concurrency:
+  group: unit-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   python:
     runs-on: ${{ matrix.os }}
@@ -15,11 +19,16 @@ jobs:
         os: [ubuntu-latest]
         python-version: ['3.11', '3.12', '3.13']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - run: sudo apt-get update && sudo apt-get install -y libarchive-tools
-      - run: pip install -r requirements-test.txt && pip install -e .
-      - run: ruff check src tests
-      - run: pytest
+          enable-cache: true
+      - name: Install bsdtar (the extractor and its tests use it)
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+      - run: uv sync --locked
+      - name: Lockfile, lint, format and types (once, on the newest Python)
+        if: matrix.python-version == '3.13'
+        run: uv run --no-sync strata-check --fast
+      - name: Tests with coverage (unit and integration: the extract script is exercised by the integration tests)
+        run: uv run --no-sync pytest --cov --cov-report=term

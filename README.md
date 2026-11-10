@@ -29,8 +29,7 @@ Paths and limits are environment variables with defaults (`EXPORTS_ROOT=/srv/exp
 
 ## Develop
 ```bash
-pip install -r requirements-test.txt && pip install -e .
-pytest                       # unit + integration (the integration tests run the real bash script; need bsdtar)
-ruff check src tests
+uv sync && scripts/check   # the gate: lockfile, ruff, format, pyright, ty, tests (needs bsdtar)
+uv run pytest                # unit + integration (the integration tests run the real bash script; need bsdtar)
 ```
 See [AGENTS.md](AGENTS.md) for the rules that matter (ordering, deleting from the remote, replacing running scripts) and [docs/progress.md](docs/progress.md) for the log.

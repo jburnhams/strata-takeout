@@ -7,10 +7,12 @@
              overlap for watches, so queries on watches use the `watches` view (watch-history only, ads left out) or filter on `source`.
 
 Times are timestamptz (UTC); Takeout writes them in the account's local zone with an abbreviation (BST/GMT), which the parser resolves.
+  subscriptions, playlists, playlist_items, videos (the account's own uploads), own_channels, comments, live_chats, messages, music_tracks: the other YouTube files of the Takeout.
 Portable types only, so the tests run on SQLite."""
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false
+import sqlalchemy as sa
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from omarchy_db import make_base
@@ -54,3 +56,125 @@ class Source(Base):
     mtime_ns: Mapped[int] = mapped_column(BigInteger)
     rows: Mapped[int] = mapped_column(Integer)
     loaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+def _acct(): return mapped_column(ForeignKey('accounts.id'), primary_key=True)
+
+
+class Subscription(Base):
+    """The channels the account is subscribed to (subscriptions.csv)."""
+    __tablename__ = 'subscriptions'
+    account: Mapped[str] = _acct()
+    channel_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    channel_url: Mapped[str | None] = mapped_column(Text, default=None)
+    title: Mapped[str | None] = mapped_column(Text, default=None)
+
+
+class Playlist(Base):
+    __tablename__ = 'playlists'
+    account: Mapped[str] = _acct()
+    playlist_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str | None] = mapped_column(Text, default=None)
+    language: Mapped[str | None] = mapped_column(String(16), default=None)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    video_order: Mapped[str | None] = mapped_column(String(32), default=None)
+    visibility: Mapped[str | None] = mapped_column(String(32), default=None)
+    add_to_top: Mapped[bool | None] = mapped_column(Boolean, default=None)
+
+
+class PlaylistItem(Base):
+    """One video in a playlist (`<title> videos.csv`); playlist_id is null when the file's name matches no playlist."""
+    __tablename__ = 'playlist_items'
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    account: Mapped[str] = mapped_column(ForeignKey('accounts.id'))
+    playlist_title: Mapped[str] = mapped_column(Text)
+    video_id: Mapped[str] = mapped_column(String(32), index=True)
+    position: Mapped[int] = mapped_column(Integer)
+    playlist_id: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+    added_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class Video(Base):
+    """The account's own uploads (Video metadata/: videos, video texts, video recordings; later files of the same video win)."""
+    __tablename__ = 'videos'
+    account: Mapped[str] = _acct()
+    video_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    title: Mapped[str | None] = mapped_column(Text, default=None)
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    channel_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    duration_ms: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    language: Mapped[str | None] = mapped_column(String(16), default=None)
+    category: Mapped[str | None] = mapped_column(String(64), default=None)
+    privacy: Mapped[str | None] = mapped_column(String(32), default=None)
+    state: Mapped[str | None] = mapped_column(String(32), default=None)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    tags: Mapped[list | None] = mapped_column(sa.JSON, default=None)
+    latitude: Mapped[float | None] = mapped_column(Float, default=None)
+    longitude: Mapped[float | None] = mapped_column(Float, default=None)
+    altitude: Mapped[float | None] = mapped_column(Float, default=None)
+    text_title: Mapped[str | None] = mapped_column(Text, default=None)           # video texts.csv: the segments joined
+    text_description: Mapped[str | None] = mapped_column(Text, default=None)
+    text_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class OwnChannel(Base):
+    __tablename__ = 'own_channels'
+    account: Mapped[str] = _acct()
+    channel_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str | None] = mapped_column(Text, default=None)
+    visibility: Mapped[str | None] = mapped_column(String(32), default=None)
+    vanity_urls: Mapped[list | None] = mapped_column(sa.JSON, default=None)
+    settings: Mapped[dict | None] = mapped_column(sa.JSON, default=None)         # channel feature data, as it came
+
+
+class Comment(Base):
+    __tablename__ = 'comments'
+    account: Mapped[str] = _acct()
+    comment_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    channel_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    video_id: Mapped[str | None] = mapped_column(String(32), default=None, index=True)
+    parent_id: Mapped[str | None] = mapped_column(String(128), default=None)
+    top_level_id: Mapped[str | None] = mapped_column(String(128), default=None)
+    text: Mapped[str | None] = mapped_column(Text, default=None)                 # plain text of the segments
+    raw: Mapped[str | None] = mapped_column(Text, default=None)                  # the JSON segments (mentions, links) as exported
+    price: Mapped[str | None] = mapped_column(String(32), default=None)
+
+
+class LiveChat(Base):
+    __tablename__ = 'live_chats'
+    account: Mapped[str] = _acct()
+    chat_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    channel_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    video_id: Mapped[str | None] = mapped_column(String(32), default=None)
+    text: Mapped[str | None] = mapped_column(Text, default=None)
+    price: Mapped[str | None] = mapped_column(String(32), default=None)
+
+
+class Message(Base):
+    """Direct messages (messages/conversation_*.csv): sender, recipients and a shared video; Takeout has no message text."""
+    __tablename__ = 'messages'
+    account: Mapped[str] = _acct()
+    message_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    sender_channel_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    conversation_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    recipients: Mapped[str | None] = mapped_column(Text, default=None)
+    video_id: Mapped[str | None] = mapped_column(String(32), default=None)
+
+
+class MusicTrack(Base):
+    """YouTube Music: `library` songs (video id known) and `upload`s (metadata of the uploaded files)."""
+    __tablename__ = 'music_tracks'
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    account: Mapped[str] = mapped_column(ForeignKey('accounts.id'))
+    kind: Mapped[str] = mapped_column(String(16))
+    title: Mapped[str | None] = mapped_column(Text, default=None)
+    album: Mapped[str | None] = mapped_column(Text, default=None)
+    artist: Mapped[str | None] = mapped_column(Text, default=None)
+    artist2: Mapped[str | None] = mapped_column(Text, default=None)
+    duration_s: Mapped[float | None] = mapped_column(Float, default=None)
+    video_id: Mapped[str | None] = mapped_column(String(32), default=None)

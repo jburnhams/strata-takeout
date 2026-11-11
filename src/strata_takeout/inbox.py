@@ -25,6 +25,10 @@ TEMP_EXT = ('.part', '.partial', '.tmp', '.crdownload', '.download')
 
 def platform_name(d): return re.sub(r'[^a-z0-9._-]+', '-', d.lower()).strip('-')
 
+def strip_for(platform):
+    """Leading path components to drop: Google-family platforms (google2 = a second/brand account's Takeout) drop Takeout/ exactly as the main `google` tree does, so both parse with the same code; everything else keeps the archive's own top folder."""
+    return 1 if platform.startswith('google') else 0
+
 def is_archive(name): return name.lower().endswith(ARCHIVE_EXT)
 
 def settled(path, settle, recheck=2.0, now=None):
@@ -55,20 +59,20 @@ def ensure_collection(filecat, platform, exports, done_dir):
     root = os.path.join(exports, platform)
     r = run_cmd(f'{filecat} collection list')
     if r.returncode == 0 and re.search(rf'^{re.escape(platform)} \[', r.stdout, re.M): return True
-    r = run_cmd(f'{filecat} collection add {platform} --profile export --root tree={root}/tree --root loose={root}/loose,autoscan --set strip=0 --set done_dir={done_dir}')
+    r = run_cmd(f'{filecat} collection add {platform} --profile export --root tree={root}/tree --root loose={root}/loose,autoscan --set strip={strip_for(platform)} --set done_dir={done_dir}')
     return r.returncode == 0
 
 def process_archive(path, platform, exports, done_root, filecat, notify, log):
     tree = os.path.join(exports, platform, 'tree'); os.makedirs(tree, exist_ok=True)
-    r = run_cmd(['bsdtar', '-xf', path, '-C', tree, '--no-same-owner', '--no-same-permissions'])
+    r = run_cmd(['bsdtar', '-xf', path, '-C', tree, '--no-same-owner', '--no-same-permissions'] + (['--strip-components=1'] if strip_for(platform) else []))
     if r.returncode != 0:
         log(f'  bsdtar failed ({(r.stderr or "").strip().splitlines()[-1][:100] if r.stderr else r.returncode}); retrying with the safe extractor')
-        failed = safe_extract(path, tree, os.path.join(exports, platform, 'renamed.tsv'), strip=0, nested=())
+        failed = safe_extract(path, tree, os.path.join(exports, platform, 'renamed.tsv'), strip=strip_for(platform), nested=())
         if failed: log(f'  FAILED: {failed} entries could not be extracted'); return False
     done_dir = os.path.join(done_root, platform)
     dest = unique(done_dir, os.path.basename(path)); move(path, dest)
     if ensure_collection(filecat, platform, exports, done_dir):
-        r = run_cmd(f'{filecat} ingest-archive {platform} {dest} --root tree --strip 0')
+        r = run_cmd(f'{filecat} ingest-archive {platform} {dest} --root tree --strip {strip_for(platform)}')
         if r.returncode != 0: log(f'  catalogue: could not record ({(r.stderr or r.stdout).strip()[-100:]}); filecat run will retry from {done_dir}')
     else: log('  catalogue: filecat unavailable; filecat run will pick the archive up from done/')
     notify(f'Takeout inbox: {platform}', f'{os.path.basename(path)} extracted into {tree}')

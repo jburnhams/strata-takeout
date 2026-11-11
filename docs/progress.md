@@ -10,3 +10,6 @@ Decisions:
 - Everything that touches data is covered by the integration tests in `tests/integration/test_takeout_extract.py` (oldest-first, the download gate, nested skip, long names, twins, corrupt archive).
 
 Open: `takeout-pull` tests (needs a fake rclone), a second platform, a request/reminder helper for tier-B services, own Google client id.
+
+## 2026-11-11: second Google account (brand YouTube channel)
+A Takeout of a second account (brand channel "whyIsItSoLoud", own uploads, My Activity, YouTube) was dropped in `~/dropbox/takeouts/google2/`. Decision: it is its own inbox platform, `google2` -> `/srv/exports/google2/tree/` + its own filecat collection, never `google/` (that merges into `/srv/exports/gt` and would overwrite the main account's files at the same paths). Inbox change: platforms whose name starts with `google` extract with `Takeout/` stripped (`strip_for`), so both trees have the same layout (`YouTube and YouTube Music/...`, `My Activity/...`) and the same parsers work on either. Not routed through the Drive pipeline (no Drive for this account; the manual download is the fetch).

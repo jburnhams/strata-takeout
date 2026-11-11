@@ -9,7 +9,7 @@ HERE=$(cd "$(dirname "$0")/.." && pwd); FC=${STRATA_FILECAT:-$HERE/../strata-fil
 VENV=${STRATA_VENV:-$HOME/.local/share/strata/venv}; BIN=${BIN:-$HOME/.local/bin}
 [ -d "$VENV" ] || uv venv -q "$VENV"
 args=(-e "$HERE[youtube]"); [ -d "$FC" ] && args+=(-e "$FC") || echo "note: $FC not found: filecat is not installed (strata-filecat is optional)" >&2
-# filecat's database layer, omarchy-db, is in the private repo jburnhams/database (not on PyPI): from GitHub main, not
+# filecat's database layer, omarchy-db, is in the public repo jburnhams/database (not on PyPI): from GitHub main, not
 # from a local clone whose branch other work may switch. Needed before filecat's code that imports it.
 [ -d "$FC" ] && args=("omarchy-db @ git+https://github.com/jburnhams/database@main#subdirectory=python" "${args[@]}")
 uv pip install -q --python "$VENV/bin/python" "${args[@]}"

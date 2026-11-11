@@ -1,0 +1,10 @@
+[Unit]
+Description=Load YouTube history from the extracted Google trees into the shared database (schema youtube); unchanged files are skipped
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/strata-takeout-youtube sync
+# Real shared Postgres is opt-in (omarchy_db refuses it otherwise); never set it in a shell profile.
+Environment=OMARCHY_DB_LIVE=1
+Nice=10

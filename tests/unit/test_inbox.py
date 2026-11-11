@@ -211,3 +211,15 @@ def test_a_second_run_while_one_is_in_progress_exits_quietly(tmp_path, monkeypat
     with pytest.raises(SystemExit) as e:
         inbox.main([])
     assert e.value.code == 0
+
+
+def test_google_family_platform_strips_takeout_like_main_tree(w, fake_filecat):
+    mkzip(
+        w.inbox / "google2" / "takeout-1.zip",
+        {"Takeout/YouTube and YouTube Music/subscriptions/subscriptions.csv": "x"},
+    )
+    w.run()
+    assert (
+        w.exports / "google2" / "tree" / "YouTube and YouTube Music" / "subscriptions" / "subscriptions.csv"
+    ).read_text() == "x"
+    assert any("--strip 1" in str(c) for c in fake_filecat) and any("strip=1" in str(c) for c in fake_filecat)

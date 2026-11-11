@@ -4,7 +4,7 @@ from strata_takeout.profile import Takeout
 
 
 def test_map_and_meta():
-    p = Takeout({}, "/srv/exports/gt")
+    p = Takeout({}, "/exports/gt")
     assert p.meta("takeout-20260209T204735Z-12-078.zip") == "20260209T204735Z" and p.meta("other.zip") is None
     assert p.map("Takeout/Drive/a.txt") == ("ok", "Drive/a.txt", None) or p.map("Takeout/Drive/a.txt")[:2] == (
         "ok",
@@ -37,7 +37,7 @@ def test_pending_archives_in_extraction_order(tmp_path):
 def test_export_profile_keeps_the_top_folder_and_skips_nothing_by_default():
     from strata_takeout.profile import Export
 
-    p = Export({}, "/srv/exports/meta/tree")
+    p = Export({}, "/exports/meta/tree")
     assert (
         p.map("facebook-jon/posts/a.json") == ("ok", "facebook-jon/posts/a.json", None)
         and p.map("x/Drive/Takeout/y.zip")[0] == "ok"

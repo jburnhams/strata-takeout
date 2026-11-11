@@ -1,4 +1,4 @@
-"""strata-takeout-inbox: ingest export archives dropped into ~/dropbox/takeouts/<platform>/ (an SMB share, so any device can drop files there).
+"""strata-takeout-inbox: ingest export archives dropped into <INBOX>/<platform>/ (e.g. a network share, so any device can drop files there).
 
   <INBOX>/<platform>/<file>   becomes   <EXPORTS>/<platform>/tree/...     (archives, extracted)
                                         <EXPORTS>/<platform>/loose/<file>  (anything that is not an archive; a dropped folder moves in whole)
@@ -14,7 +14,7 @@ Platform `google` is special: its archives are handed to the Google pipeline (re
 as the Drive deliveries); its other files go to google-takeout/loose.
 A JSON file that is a download manifest (a list of one-time links, as claude.ai exports) is not stored: its files are downloaded into the platform folder (see manifest.py)
 and extracted by a later run.
-Env: INBOX, EXPORTS_ROOT, DONE_ROOT, STAGE, MANIFEST_HOSTS (claude.ai), SETTLE (600), FILECAT (command, default ~/.local/bin/filecat), NTFY_SEND.
+Env (no path defaults: the job passes them): INBOX, EXPORTS_ROOT, DONE_ROOT, STAGE (required), REQUIRE_MOUNTPOINT (refuse to run when EXPORTS_ROOT is not a mount point), MANIFEST_HOSTS (claude.ai), SETTLE (600), FILECAT (command, default `filecat`), NTFY_SEND (optional notifier command).
 """
 
 import os
@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 from . import manifest as mf
@@ -33,6 +34,11 @@ TEMP_EXT = (".part", ".partial", ".tmp", ".crdownload", ".download")
 
 def platform_name(d):
     return re.sub(r"[^a-z0-9._-]+", "-", d.lower()).strip("-")
+
+
+def strip_for(platform):
+    """Leading path components to drop: Google-family platforms (google2 = a second/brand account's Takeout) drop Takeout/ exactly as the main `google` tree does, so both parse with the same code; everything else keeps the archive's own top folder."""
+    return 1 if platform.startswith("google") else 0
 
 
 def is_archive(name):
@@ -81,7 +87,7 @@ def ensure_collection(filecat, platform, exports, done_dir):
     if r.returncode == 0 and re.search(rf"^{re.escape(platform)} \[", r.stdout, re.M):
         return True
     r = run_cmd(
-        f"{filecat} collection add {platform} --profile export --root tree={root}/tree --root loose={root}/loose,autoscan --set strip=0 --set done_dir={done_dir}"
+        f"{filecat} collection add {platform} --profile export --root tree={root}/tree --root loose={root}/loose,autoscan --set strip={strip_for(platform)} --set done_dir={done_dir}"
     )
     return r.returncode == 0
 
@@ -89,12 +95,17 @@ def ensure_collection(filecat, platform, exports, done_dir):
 def process_archive(path, platform, exports, done_root, filecat, notify, log):
     tree = os.path.join(exports, platform, "tree")
     os.makedirs(tree, exist_ok=True)
-    r = run_cmd(["bsdtar", "-xf", path, "-C", tree, "--no-same-owner", "--no-same-permissions"])
+    r = run_cmd(
+        ["bsdtar", "-xf", path, "-C", tree, "--no-same-owner", "--no-same-permissions"]
+        + (["--strip-components=1"] if strip_for(platform) else [])
+    )
     if r.returncode != 0:
         log(
             f"  bsdtar failed ({(r.stderr or '').strip().splitlines()[-1][:100] if r.stderr else r.returncode}); retrying with the safe extractor"
         )
-        failed = safe_extract(path, tree, os.path.join(exports, platform, "renamed.tsv"), strip=0, nested=())
+        failed = safe_extract(
+            path, tree, os.path.join(exports, platform, "renamed.tsv"), strip=strip_for(platform), nested=()
+        )
         if failed:
             log(f"  FAILED: {failed} entries could not be extracted")
             return False
@@ -102,7 +113,7 @@ def process_archive(path, platform, exports, done_root, filecat, notify, log):
     dest = unique(done_dir, os.path.basename(path))
     move(path, dest)
     if ensure_collection(filecat, platform, exports, done_dir):
-        r = run_cmd(f"{filecat} ingest-archive {platform} {dest} --root tree --strip 0")
+        r = run_cmd(f"{filecat} ingest-archive {platform} {dest} --root tree --strip {strip_for(platform)}")
         if r.returncode != 0:
             log(
                 f"  catalogue: could not record ({(r.stderr or r.stdout).strip()[-100:]}); filecat run will retry from {done_dir}"
@@ -220,22 +231,23 @@ def main(argv=None):
     import fcntl
 
     lock = open(
-        os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "strata-takeout-inbox.lock"),  # noqa: S108  (fallback only when XDG_RUNTIME_DIR is unset)
-        "w",
+        os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "strata-takeout-inbox.lock"), "w"
     )  # one run at a time: two runs would both use the same one-time links
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         print("inbox: another run is in progress")
         sys.exit(0)
-    home = os.path.expanduser("~")
-    exports = os.environ.get("EXPORTS_ROOT", "/srv/exports")
-    if "EXPORTS_ROOT" not in os.environ and not os.path.ismount(exports):
+    missing = [v for v in ("INBOX", "EXPORTS_ROOT", "DONE_ROOT", "STAGE") if not os.environ.get(v)]
+    if missing:
+        sys.exit("set " + ", ".join(missing) + " (no path defaults: the job passes them)")
+    exports = os.environ["EXPORTS_ROOT"]
+    if os.environ.get("REQUIRE_MOUNTPOINT") and not os.path.ismount(exports):
         sys.exit(f"{exports} is not mounted")
-    notify_cmd = os.environ.get("NTFY_SEND", os.path.join(home, ".local/bin/ntfy-send"))
+    notify_cmd = os.environ.get("NTFY_SEND")
 
     def notify(title, msg):
-        if "EXPORTS_ROOT" in os.environ and "NTFY_SEND" not in os.environ:
+        if not notify_cmd:
             return
         try:
             subprocess.run([notify_cmd, title, msg, "low", "inbox_tray"], timeout=120, capture_output=True)
@@ -243,14 +255,14 @@ def main(argv=None):
             pass
 
     p, f = run(
-        os.path.expanduser(os.environ.get("INBOX", "~/dropbox/takeouts")),
+        os.path.expanduser(os.environ["INBOX"]),
         exports,
-        os.path.expanduser(os.environ.get("DONE_ROOT", "~/.cache/takeout-done")),
+        os.path.expanduser(os.environ["DONE_ROOT"]),
         int(os.environ.get("SETTLE", "600")),
         float(os.environ.get("RECHECK", "2")),
-        os.environ.get("FILECAT", os.path.join(home, ".local/bin/filecat")),
+        os.environ.get("FILECAT", "filecat"),
         notify,
-        stage=os.path.expanduser(os.environ.get("STAGE", "~/.cache/takeout-stage")),
+        stage=os.path.expanduser(os.environ["STAGE"]),
         hosts=tuple(h for h in os.environ.get("MANIFEST_HOSTS", "claude.ai").split(",") if h),
     )
     print(f"inbox: {p} processed, {f} failed")

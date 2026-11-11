@@ -26,6 +26,7 @@ def env(tmp_path):
         os.environ,
         PATH=f"{bin_}:{os.environ['PATH']}",
         EXPORTS_ROOT=str(tmp_path / "ex"),
+        TAKEOUT_REMOTE="remote:Takeout",
         STAGE=str(tmp_path / "stage"),
         XDG_RUNTIME_DIR=str(tmp_path),
         XDG_STATE_HOME=str(tmp_path / "state"),

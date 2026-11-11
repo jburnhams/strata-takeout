@@ -8,12 +8,16 @@ version = "0.1.0"
 description = "Download, extract and catalogue data exports from cloud platforms (Google Takeout first)"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []                      # standard library only; the scripts use rclone, bsdtar and (optionally) strata-filecat
+dependencies = []                      # the core is standard library only; the scripts use rclone, bsdtar and (optionally) strata-filecat
+
+[project.optional-dependencies]
+youtube = ["omarchy-db", "strata-python"]      # strata-takeout-youtube: YouTube history into the shared database (sources below)
 
 [project.scripts]
 strata-takeout-safe-extract = "strata_takeout.safe_extract:main"
 strata-takeout-inbox = "strata_takeout.inbox:main"
 strata-takeout-nested = "strata_takeout.nested:main"
+strata-takeout-youtube = "strata_takeout.youtube.cli:main"
 
 [project.entry-points."filecat.profiles"]
 takeout = "strata_takeout.profile:Takeout"
@@ -30,7 +34,8 @@ dev = [
     "ruff",
     "pyright",
     "ty",
-    "strata-python",     # only for its strata-check gate (scripts/check); the app itself needs nothing from it
+    "strata-python",     # its strata-check gate (scripts/check); also a dependency of the [youtube] extra
+    "omarchy-db",        # the youtube schema's tests (models, migrations, fixtures)
 ]
 
 [tool.uv]
@@ -39,6 +44,7 @@ default-groups = ["dev"]
 [tool.uv.sources]
 # strata-python tracks main (no tag): uv.lock pins the commit, `uv lock --upgrade-package strata-python` moves it
 strata-python = { git = "https://github.com/jburnhams/strata-python" }
+omarchy-db = { git = "https://github.com/jburnhams/database", subdirectory = "python" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/strata_takeout"]
@@ -134,3 +140,9 @@ not-iterable = "ignore"
 too-many-positional-arguments = "ignore"
 unknown-argument = "ignore"
 redundant-condition = "ignore"
+
+# The YouTube history schema (src/strata_takeout/youtube/models.py, migrations/): `dbtool revision -m "..."` after a model change, `dbtool check` before a PR.
+[tool.omarchy-db]
+app = "youtube"
+models = "strata_takeout.youtube.models:Base"
+migrations = "migrations"

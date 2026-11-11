@@ -288,15 +288,11 @@ def main(argv=None):
 
     ap = argparse.ArgumentParser(prog="strata-takeout-nested", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    ap.add_argument("--dest", default="/srv/exports/gt-nested")
+    ap.add_argument("--dest", required=True, help="folder the nested content is extracted into")
     ap.add_argument("--index", default=None)
-    ap.add_argument("--gt-root", default="/srv/exports/gt")
+    ap.add_argument("--gt-root", required=True, help="the extracted tree to compare against")
     ap.add_argument("--collection", default="google-takeout")
-    ap.add_argument(
-        "--zips",
-        nargs="*",
-        default=[os.path.expanduser("~/.cache/takeout-done"), os.path.expanduser("~/.cache/takeout-stage")],
-    )
+    ap.add_argument("--zips", nargs="+", required=True, help="folders holding the (wrapper) zips")
     for name in ("index", "extract"):
         p = sub.add_parser(name)
         p.add_argument("--workers", type=int, default=3)
@@ -313,8 +309,8 @@ def main(argv=None):
     c = connect(a.index or os.path.join(os.path.dirname(os.path.abspath(a.dest)), ".gt-nested-index.sqlite"))
     if a.cmd == "index":
         from filecat.db import (
-            connect as fc_connect,  # the catalogue says which nested zips were skipped, and in which wrapper
-        )
+            connect as fc_connect,
+        )  # the catalogue says which nested zips were skipped, and in which wrapper
 
         fc = fc_connect()
         cid = fc.execute("select id from collections where name=?", (a.collection,)).fetchall()[0][0]

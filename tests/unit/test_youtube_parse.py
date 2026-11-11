@@ -50,3 +50,15 @@ def test_sync_is_idempotent_skips_unchanged_and_keeps_accounts(tmp_path, db_sess
 def test_accounts_setting():
     from strata_takeout.youtube.cli import accounts
     assert accounts('main:Main=/a,b=/c d') == [('main', 'Main', '/a'), ('b', None, '/c d')]
+
+
+def test_no_default_accounts():
+    import pytest
+    from strata_takeout.youtube.cli import accounts
+    with pytest.raises(SystemExit): accounts('')
+
+
+def test_account_channel_id_comes_from_the_takeout(tmp_path, db_session):
+    d = tmp_path / 'YouTube and YouTube Music' / 'channels'; d.mkdir(parents=True); (d / 'channel.csv').write_text('Channel ID,Channel title (Original),Channel visibility\nUCx,T,Public\n')
+    sync_tree(db_session, 'a', str(tmp_path)); db_session.commit()
+    assert db_session.execute(text("select channel_id from accounts where id='a'")).scalar() == 'UCx'

@@ -4,11 +4,11 @@ import glob
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, insert
+from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
 from .datasets import DATASETS, files_of
-from .models import Account, Activity, Source
+from .models import Account, Activity, OwnChannel, Source
 from .parse import parse_file
 
 # source name -> path under the account's tree (same layout in every Google tree: Takeout/ is stripped by the inbox)
@@ -49,6 +49,10 @@ def sync_tree(session: Session, account: str, tree: str, label: str | None = Non
         if not force and prev and (prev.size, prev.mtime_ns) == (st.st_size, st.st_mtime_ns): done[source] = None; continue
         done[source] = load_file(session, account, source, p, st)
     for name in DATASETS: done[name] = load_dataset(session, account, tree, name, force)
+    acct = session.get(Account, account)
+    if acct.channel_id is None:                                  # the account's own channel, from channels/channel.csv
+        own = session.execute(select(OwnChannel.channel_id).where(OwnChannel.account == account)).scalars().first()
+        if own: acct.channel_id = own
     return {k: v for k, v in done.items() if v != 0 or k in FILES}
 
 

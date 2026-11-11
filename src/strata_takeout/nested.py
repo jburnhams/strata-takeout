@@ -175,8 +175,8 @@ def fmt(n, b): return f'{n:>9,} files {b/1e9:>9,.1f} GB'
 def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser(prog='strata-takeout-nested', description=__doc__.split('\n\n')[0]); sub = ap.add_subparsers(dest='cmd', required=True)
-    ap.add_argument('--dest', default='/srv/exports/gt-nested'); ap.add_argument('--index', default=None); ap.add_argument('--gt-root', default='/srv/exports/gt')
-    ap.add_argument('--collection', default='google-takeout'); ap.add_argument('--zips', nargs='*', default=[os.path.expanduser('~/.cache/takeout-done'), os.path.expanduser('~/.cache/takeout-stage')])
+    ap.add_argument('--dest', required=True, help='folder the nested content is extracted into'); ap.add_argument('--index', default=None); ap.add_argument('--gt-root', required=True, help='the extracted tree to compare against')
+    ap.add_argument('--collection', default='google-takeout'); ap.add_argument('--zips', nargs='+', required=True, help='folders holding the (wrapper) zips')
     for name in ('index', 'extract'): p = sub.add_parser(name); p.add_argument('--workers', type=int, default=3)
     sub.choices['index'].add_argument('--limit', type=int)
     sub.choices['extract'].add_argument('--min-free-gb', type=int, default=300)

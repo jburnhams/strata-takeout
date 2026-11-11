@@ -1,4 +1,4 @@
-"""strata-takeout-inbox: ingest export archives dropped into ~/dropbox/takeouts/<platform>/ (an SMB share, so any device can drop files there).
+"""strata-takeout-inbox: ingest export archives dropped into <INBOX>/<platform>/ (e.g. a network share, so any device can drop files there).
 
   <INBOX>/<platform>/<file>   becomes   <EXPORTS>/<platform>/tree/...     (archives, extracted)
                                         <EXPORTS>/<platform>/loose/<file>  (anything that is not an archive; a dropped folder moves in whole)
@@ -14,7 +14,7 @@ Platform `google` is special: its archives are handed to the Google pipeline (re
 as the Drive deliveries); its other files go to google-takeout/loose.
 A JSON file that is a download manifest (a list of one-time links, as claude.ai exports) is not stored: its files are downloaded into the platform folder (see manifest.py)
 and extracted by a later run.
-Env: INBOX, EXPORTS_ROOT, DONE_ROOT, STAGE, MANIFEST_HOSTS (claude.ai), SETTLE (600), FILECAT (command, default ~/.local/bin/filecat), NTFY_SEND.
+Env (no path defaults: the job passes them): INBOX, EXPORTS_ROOT, DONE_ROOT, STAGE (required), REQUIRE_MOUNTPOINT (refuse to run when EXPORTS_ROOT is not a mount point), MANIFEST_HOSTS (claude.ai), SETTLE (600), FILECAT (command, default `filecat`), NTFY_SEND (optional notifier command).
 """
 import os, re, shutil, subprocess, sys, time
 from . import manifest as mf
@@ -126,17 +126,18 @@ def main(argv=None):
     lock = open(os.path.join(os.environ.get('XDG_RUNTIME_DIR', '/tmp'), 'strata-takeout-inbox.lock'), 'w')            # one run at a time: two runs would both use the same one-time links
     try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError: print('inbox: another run is in progress'); sys.exit(0)
-    home = os.path.expanduser('~')
-    exports = os.environ.get('EXPORTS_ROOT', '/srv/exports')
-    if 'EXPORTS_ROOT' not in os.environ and not os.path.ismount(exports): sys.exit(f'{exports} is not mounted')
-    notify_cmd = os.environ.get('NTFY_SEND', os.path.join(home, '.local/bin/ntfy-send'))
+    missing = [v for v in ('INBOX', 'EXPORTS_ROOT', 'DONE_ROOT', 'STAGE') if not os.environ.get(v)]
+    if missing: sys.exit('set ' + ', '.join(missing) + ' (no path defaults: the job passes them)')
+    exports = os.environ['EXPORTS_ROOT']
+    if os.environ.get('REQUIRE_MOUNTPOINT') and not os.path.ismount(exports): sys.exit(f'{exports} is not mounted')
+    notify_cmd = os.environ.get('NTFY_SEND')
     def notify(title, msg):
-        if 'EXPORTS_ROOT' in os.environ and 'NTFY_SEND' not in os.environ: return
+        if not notify_cmd: return
         try: subprocess.run([notify_cmd, title, msg, 'low', 'inbox_tray'], timeout=120, capture_output=True)
         except Exception: pass
-    p, f = run(os.path.expanduser(os.environ.get('INBOX', '~/dropbox/takeouts')), exports, os.path.expanduser(os.environ.get('DONE_ROOT', '~/.cache/takeout-done')),
-               int(os.environ.get('SETTLE', '600')), float(os.environ.get('RECHECK', '2')), os.environ.get('FILECAT', os.path.join(home, '.local/bin/filecat')), notify,
-               stage=os.path.expanduser(os.environ.get('STAGE', '~/.cache/takeout-stage')), hosts=tuple(h for h in os.environ.get('MANIFEST_HOSTS', 'claude.ai').split(',') if h))
+    p, f = run(os.path.expanduser(os.environ['INBOX']), exports, os.path.expanduser(os.environ['DONE_ROOT']),
+               int(os.environ.get('SETTLE', '600')), float(os.environ.get('RECHECK', '2')), os.environ.get('FILECAT', 'filecat'), notify,
+               stage=os.path.expanduser(os.environ['STAGE']), hosts=tuple(h for h in os.environ.get('MANIFEST_HOSTS', 'claude.ai').split(',') if h))
     print(f'inbox: {p} processed, {f} failed')
     sys.exit(1 if f else 0)
 

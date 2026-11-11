@@ -1,6 +1,6 @@
 #!/bin/bash
-# setup-exports-disk: the 8 TB Seagate as an encrypted (LUKS2) ext4 disk for data exports (Google Takeout etc.) at /srv/exports.
-#   sudo DISK_SERIAL=... DISK_MODEL=... setup-exports-disk status|prepare
+# setup-exports-disk: a dedicated disk as an encrypted (LUKS2) ext4 disk for data exports (Google Takeout etc.) at $MOUNT_POINT.
+#   sudo DISK_SERIAL=... DISK_MODEL=... MOUNT_POINT=... setup-exports-disk status|prepare
 #   prepare   WIPES the disk (asks you to type the serial). Same scheme as setup-mirror-disk:
 #                                     key file on the encrypted root for boot + a passphrase you type as second key slot.
 # Doc: README.md (Install)
@@ -12,7 +12,7 @@ HOME_DIR=$(getent passwd "$OWNER" | cut -d: -f6); GRP=$(id -gn "$OWNER")
 SERIAL=${DISK_SERIAL:?set DISK_SERIAL (see lsblk -dno PATH,SERIAL,MODEL)}; MODEL_PART=${DISK_MODEL:?set DISK_MODEL (part of the model string)}
 DISK=$(lsblk -dnpo PATH,SERIAL | awk -v s="$SERIAL" '$2==s {print $1; exit}')
 [ -n "$DISK" ] || { echo "no disk with serial $SERIAL" >&2; exit 1; }
-NAME=exports; MP=/srv/exports; FSTAB=/etc/fstab
+NAME=exports; MP=${MOUNT_POINT:?set MOUNT_POINT (where the exports disk gets mounted)}; FSTAB=/etc/fstab
 KEY=/etc/cryptsetup-keys.d/$NAME.key
 
 case "${1:-help}" in

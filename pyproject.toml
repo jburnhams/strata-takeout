@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "strata-takeout"
@@ -11,10 +11,7 @@ requires-python = ">=3.11"
 dependencies = []                      # the core is standard library only; the scripts use rclone, bsdtar and (optionally) strata-filecat
 
 [project.optional-dependencies]
-youtube = [                            # strata-takeout-youtube: YouTube history into the shared database
-  "omarchy-db @ git+https://github.com/jburnhams/database@main#subdirectory=python",
-  "strata-python @ git+https://github.com/jburnhams/strata-python@main",
-]
+youtube = ["omarchy-db", "strata-python"]      # strata-takeout-youtube: YouTube history into the shared database (sources below)
 
 [project.scripts]
 strata-takeout-safe-extract = "strata_takeout.safe_extract:main"
@@ -26,20 +23,123 @@ strata-takeout-youtube = "strata_takeout.youtube.cli:main"
 takeout = "strata_takeout.profile:Takeout"
 export = "strata_takeout.profile:Export"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "pytest-randomly",
+    "pytest-timeout",
+    "pytest-xdist",
+    "diff-cover",
+    "ruff",
+    "pyright",
+    "ty",
+    "strata-python",     # its strata-check gate (scripts/check); also a dependency of the [youtube] extra
+    "omarchy-db",        # the youtube schema's tests (models, migrations, fixtures)
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+# strata-python tracks main (no tag): uv.lock pins the commit, `uv lock --upgrade-package strata-python` moves it
+strata-python = { git = "https://github.com/jburnhams/strata-python" }
+omarchy-db = { git = "https://github.com/jburnhams/database", subdirectory = "python" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/strata_takeout"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests/unit", "tests/integration"]
-addopts = "-ra"
+addopts = "-ra --timeout=300 --strict-markers"
+
+[tool.coverage.run]
+source = ["src/strata_takeout"]
+branch = true
+omit = ["*/__main__.py"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = false
+# Measured from the unit and integration tests together (the extract script is exercised by the integration tests). Ratchet this up as coverage improves.
+fail_under = 70
 
 [tool.ruff]
-line-length = 400
+line-length = 120
 target-version = "py311"
+extend-exclude = ["build"]
 
 [tool.ruff.lint]
-select = ["E9", "F63", "F7", "F82"]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "C4", "PT", "S", "TID"]
+ignore = [
+    "E501",    # the formatter wraps code; long comments and docstrings stay (the house style comments the why)
+    "C408",    # dict(a=1) and list() calls are the house style for records
+    "PT018",   # `assert a and b` is kept: one line says what holds
+    "E731",    # short named lambdas
+    "E741",    # one-letter names in short comprehensions
+    "SIM115",  # files opened for the life of an object are closed by it
+    "RUF005", "RUF046", "RUF001", "RUF002", "RUF003", "RUF043", "RUF012", "UP031", "B008",   # style-only findings, in code that is fine as written
+    "B904", "B905", "RUF059", "RUF007",   # existing code: raises inside except, zips without strict, unused unpacked names; fixing them is its own change
+    "S110", "S112", "S301", "S307", "S310", "S314", "S324", "S603", "S607", "SIM105",   # best-effort cleanup, hashes for cache keys, our own pickles and subprocesses (ffmpeg, mp3gain)
+    "PT012", "PT013", "PT006",
+    "S608",    # SQL assembled from module-level fragments (column lists, placeholders); the values are bound parameters. Audit before adding any new f-string query
+    "RUF071", "B005", "RUF017", "UP022", "RUF015", "RUF057", "B018",   # existing code, to be looked at one rule at a time (RUF071 and B005 can be real bugs)
+    "B023", "B007", "F841", "C416", "C401", "SIM102", "PT011", "PT028", "B017", "E402", "E721",   # existing code, to be cleaned up one rule at a time (B023 and F841 first: they can hide bugs)
+    "S311",    # random is used for jitter and sampling, never for secrets
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"pytest.importorskip".msg = "Do not skip when a dependency is missing: install it (locally and in CI) and let the test fail if it is not there. A deliberate skip is a marker with a reason, see AGENTS.md (Testing)."
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["S101"]
+"tests/**" = ["S101", "S104", "S105", "S106", "S108", "S603", "S607"]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+# Ratchet: files listed here are checked strictly; the rest (typed in follow-up PRs) in basic mode. Add a file when it is fully annotated; never remove one.
+strict = ["src/strata_takeout/__init__.py"]
+# Findings in the code that is not yet in the strict list are warnings, so they are visible without blocking: dict(...) literals whose value types pyright narrows too far,
+# and SQLAlchemy/NumPy stubs. They become errors file by file as each file moves into the list.
+reportArgumentType = "warning"
+reportCallIssue = "warning"
+reportIndexIssue = "warning"
+reportOptionalOperand = "warning"
+reportOptionalSubscript = "warning"
+reportOptionalMemberAccess = "warning"
+reportOperatorIssue = "warning"
+reportAttributeAccessIssue = "warning"
+reportMissingImports = "warning"      # optional packages (scipy, scikit-learn, xgboost) are only installed with their group
+reportMissingTypeStubs = "warning"
+reportPossiblyUnbound = "warning"
+reportReturnType = "warning"
+reportAssignmentType = "warning"
+reportGeneralTypeIssues = "warning"
+reportOptionalIterable = "warning"
+reportRedeclaration = "warning"       # oslib-style version-dependent definitions (compression.zstd on 3.14, zstandard before)
+
+[tool.ty.rules]
+# ty exits 1 on warnings too, so the rules below are off, not warnings. pyright (above) reports the same code as visible warnings and is the ratchet; turn a rule back on
+# here once pyright's matching warning is gone.
+call-non-callable = "ignore"
+import-not-found = "ignore"
+invalid-assignment = "ignore"
+invalid-argument-type = "ignore"
+no-matching-overload = "ignore"
+not-subscriptable = "ignore"
+missing-attribute = "ignore"
+unresolved-global = "ignore"
+unsupported-operator = "ignore"
+missing-union-attribute = "ignore"
+invalid-return-type = "ignore"
+lost-keyword-for-regular-parameter = "ignore"
+not-iterable = "ignore"
+too-many-positional-arguments = "ignore"
+unknown-argument = "ignore"
+redundant-condition = "ignore"
 
 # The YouTube history schema (src/strata_takeout/youtube/models.py, migrations/): `dbtool revision -m "..."` after a model change, `dbtool check` before a PR.
 [tool.omarchy-db]

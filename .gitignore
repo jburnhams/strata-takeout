@@ -7,3 +7,6 @@ __pycache__/
 *.db-wal
 *.db-shm
 build/
+.coverage
+coverage.xml
+htmlcov/

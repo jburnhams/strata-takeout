@@ -1,7 +1,7 @@
 #!/bin/bash
 # takeout-extract: extract finished Google Takeout archives, oldest export first, then move each to done/.
 #   takeout-extract [--dry-run]
-# stage (NVMe, ~/.cache/takeout-stage) and archives/ -> (extract into /srv/exports/gt/, the leading Takeout/ dropped) -> done/   (loose non-archive files, e.g. .mp4/.mbox, go to loose/)
+# stage (fast scratch disk, $STAGE) and archives/ -> (extract into $EXPORTS_ROOT/gt/, the leading Takeout/ dropped) -> done/   (loose non-archive files, e.g. .mp4/.mbox, go to loose/)
 # Order: export timestamp in the name (takeout-20260209T204735Z-...), then part number, so a newer export overwrites an older one.
 # While `rclone move` is running it only extracts archives whose export is <= the oldest export still downloading
 # (.partial); rclone starts files in name order, so nothing older can arrive later. Without a partial of an archive
@@ -15,16 +15,17 @@
 # KEEP_ARCHIVES=0: delete the archive after extraction instead of moving it to done/.
 # Doc: README.md and docs/platforms.md
 set -uo pipefail
-SAFE_EXTRACT=${SAFE_EXTRACT:-$HOME/.local/bin/strata-takeout-safe-extract}   # tools from this repo (scripts/install.sh); tests override them
-FILECAT=${FILECAT:-$HOME/.local/bin/filecat}
-ROOT=${EXPORTS_ROOT:-/srv/exports}/google-takeout
+SAFE_EXTRACT=${SAFE_EXTRACT:-strata-takeout-safe-extract}   # tools from this repo (scripts/install.sh); tests override them
+FILECAT=${FILECAT:-filecat}
+# No path defaults: the job passes EXPORTS_ROOT and STAGE (REQUIRE_MOUNTPOINT=1: refuse to run when EXPORTS_ROOT is not a mount point; NTFY_SEND: optional notifier command).
+ROOT=${EXPORTS_ROOT:?set EXPORTS_ROOT (where the exports disk is mounted)}/google-takeout
 SETTLE=${SETTLE:-180}; KEEP_ARCHIVES=${KEEP_ARCHIVES:-1}
 DRY=0; [ "${1:-}" = --dry-run ] && DRY=1
 exec 8>"${XDG_RUNTIME_DIR:-/tmp}/takeout-extract.lock"
 flock -n 8 || { echo "takeout-extract already running"; exit 0; }
-if [ -z "${EXPORTS_ROOT:-}" ] && ! mountpoint -q /srv/exports; then echo "/srv/exports is not mounted" >&2; exit 1; fi
-STAGE=${STAGE:-$HOME/.cache/takeout-stage}
-A="$ROOT/archives"; X=${EXTRACT_ROOT:-${EXPORTS_ROOT:-/srv/exports}/gt}; DN="$ROOT/done"; LO="$ROOT/loose"; M="$ROOT/.extracted"
+if [ -n "${REQUIRE_MOUNTPOINT:-}" ] && ! mountpoint -q "$EXPORTS_ROOT"; then echo "$EXPORTS_ROOT is not mounted" >&2; exit 1; fi
+STAGE=${STAGE:?set STAGE (fast scratch folder for archives waiting to be extracted)}
+A="$ROOT/archives"; X=${EXTRACT_ROOT:-$EXPORTS_ROOT/gt}; DN="$ROOT/done"; LO="$ROOT/loose"; M="$ROOT/.extracted"
 mkdir -p "$STAGE" "$A" "$X" "$DN" "$LO" "$M"
 # duplicate-named files on Drive were renamed to NAME-1.zip, NAME-2.zip by takeout-pull (list in $ROOT/dupes.tsv: NAME.zip<TAB>count).
 # They are different data from the same export: extract them only once all twins are here, and oldest modification time first.
@@ -73,7 +74,7 @@ done < <(find "$STAGE" "$A" -maxdepth 1 -type f ! -name '*.partial' -printf '%T@
            b=${f##*/}; ts=$(tsof "$b"); [ -n "$ts" ] || ts=00000000T000000Z
            part=$(grep -oE '[0-9]+\.(zip|tgz|tar|tar\.gz)$' <<<"$b" | grep -oE '^[0-9]+'); printf '%s\t%015d\t%08d\t%s\n' "$ts" "${mt%.*}" "$((10#${part:-0}))" "$f"
          done | sort -t$'\t' -k1,1 -k2,2n -k3,3n | cut -f1,3,4)
-if [ "$n" -gt 0 ] && [ -z "${EXPORTS_ROOT:-}" ]; then
-  ntfy-send "Takeout: $n archive(s) extracted" "$(ls "$STAGE" "$A" 2>/dev/null | grep -c zip) waiting, $(ls "$DN" | wc -l) done. Disk: $(df -h --output=avail /srv/exports | tail -1 | tr -d ' ') free." low floppy_disk
+if [ "$n" -gt 0 ] && [ -n "${NTFY_SEND:-}" ]; then
+  "$NTFY_SEND" "Takeout: $n archive(s) extracted" "$(ls "$STAGE" "$A" 2>/dev/null | grep -c zip) waiting, $(ls "$DN" | wc -l) done. Disk: $(df -h --output=avail "$EXPORTS_ROOT" | tail -1 | tr -d ' ') free." low floppy_disk
 fi
 exit $rc

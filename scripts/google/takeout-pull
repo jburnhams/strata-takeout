@@ -3,27 +3,28 @@
 #   takeout-pull [--files] [--dry-run]     (default: archives; --files: the non-archives)
 # Drive "Takeout" folder (remote gdrive:, full-drive scope) is split in two independent jobs (own lock, own systemd unit/timer),
 # so a few huge videos never hold up the zips; total parallel transfers = FILE_TRANSFERS (1) + TRANSFERS (10) = 11:
-#   --files: non-archives (.mp4, .mbox, ...)  -> straight to the exports disk: /srv/exports/google-takeout/loose/
-#   default: archives (.zip .tgz .tar)  -> staged on the NVMe in $STAGE (~/.cache/takeout-stage: outside restic, not tmpfs),
+#   --files: non-archives (.mp4, .mbox, ...)  -> straight to the exports disk: $EXPORTS_ROOT/google-takeout/loose/
+#   default: archives (.zip .tgz .tar)  -> staged on the NVMe in $STAGE (outside backups, not tmpfs),
 #      in batches of at most BATCH (soft cutoff), each sized to what is free above MIN_FREE_GB (minus ~5 GB of in-flight margin per stream). takeout-extract (own timer)
 #      extracts them oldest export first onto the exports disk and moves each archive to done/, which frees the stage.
 # `rclone move` deletes each Drive file only after the copy is verified (size + hash); --drive-use-trash=false so the space
 # is freed on Drive at once. Files younger than MIN_AGE are skipped (Takeout may still be writing them).
 # Doc: README.md and docs/platforms.md
 set -uo pipefail
-REMOTE=${TAKEOUT_REMOTE:-gdrive:Takeout}
-ROOT=${EXPORTS_ROOT:-/srv/exports}/google-takeout
-STAGE=${STAGE:-$HOME/.cache/takeout-stage}
+# No path or account defaults: the job (systemd drop-in, shell) passes them. REQUIRE_MOUNTPOINT=1 also makes it refuse to run when EXPORTS_ROOT is not a mount point.
+REMOTE=${TAKEOUT_REMOTE:?set TAKEOUT_REMOTE (rclone remote:folder holding the Takeout archives)}
+ROOT=${EXPORTS_ROOT:?set EXPORTS_ROOT (where the exports disk is mounted)}/google-takeout
+STAGE=${STAGE:?set STAGE (fast scratch folder for archives waiting to be extracted)}
 STAGE_MAX=${STAGE_MAX:-0}        # optional cap in GB on archives waiting in the stage (0 = off: the free-space rule below is what limits downloads)
 MIN_FREE_GB=${MIN_FREE_GB:-400}  # the free-space floor: the filesystem holding the stage (and the finished zips next to it) never goes below this; each batch is sized to fit above it
-NTFY_SEND=${NTFY_SEND:-$HOME/.local/bin/ntfy-send}
+NTFY_SEND=${NTFY_SEND:-}          # optional: a command taking title and message; no notifications when unset
 BATCH=${BATCH:-100G}
 MIN_AGE=${MIN_AGE:-10m}
 MODE=archives; DRY=()
 for a in "$@"; do case "$a" in --files) MODE=files;; --dry-run) DRY=(--dry-run);; *) echo "usage: takeout-pull [--files] [--dry-run]" >&2; exit 2;; esac; done
 exec 9>"${XDG_RUNTIME_DIR:-/tmp}/takeout-pull-$MODE.lock"
 flock -n 9 || { echo "takeout-pull already running"; exit 0; }
-if [ -z "${EXPORTS_ROOT:-}" ] && ! mountpoint -q /srv/exports; then echo "/srv/exports is not mounted" >&2; exit 1; fi
+if [ -n "${REQUIRE_MOUNTPOINT:-}" ] && ! mountpoint -q "$EXPORTS_ROOT"; then echo "$EXPORTS_ROOT is not mounted" >&2; exit 1; fi
 [[ $REMOTE == *:* ]] && { rclone lsd "${REMOTE%%:*}:" >/dev/null 2>&1 || { echo "rclone remote ${REMOTE%%:*}: not configured or auth failed" >&2; exit 1; }; }
 if ! rclone lsf "$REMOTE" >/dev/null 2>&1; then echo "no $REMOTE folder on Drive: nothing to do"; exit 0; fi
 mkdir -p "$ROOT/loose" "$STAGE"

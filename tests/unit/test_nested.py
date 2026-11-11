@@ -27,7 +27,7 @@ CONTENT = [(s, c) for _, _, s, c in TREE]
 
 def setup(tmp_path):
     w = build(tmp_path); c = nested.connect(str(tmp_path / 'idx.sqlite'))
-    nested.run_index(c, [('k1', w, N1), ('k2', w, N2)], '/srv/exports/gt', workers=2, log=lambda *_: None)
+    nested.run_index(c, [('k1', w, N1), ('k2', w, N2)], '/exports/gt', workers=2, log=lambda *_: None)
     nested.load_tree(c, TREE, CONTENT)
     return w, c
 
@@ -66,10 +66,10 @@ def test_extract_stops_when_the_destination_is_low_on_space_and_keeps_the_unit_f
 
 def test_indexing_is_resumable_and_a_missing_wrapper_is_recorded_not_fatal(tmp_path):
     w, c = setup(tmp_path); n = c.execute('SELECT COUNT(*) FROM entries').fetchone()[0]
-    nested.run_index(c, [('k1', w, N1), ('k2', w, N2)], '/srv/exports/gt', workers=1, log=lambda *_: None); assert c.execute('SELECT COUNT(*) FROM entries').fetchone()[0] == n      # no duplicates on a re-run
-    nested.run_index(c, [('k3', str(tmp_path / 'missing.zip'), N1)], '/srv/exports/gt', workers=1, log=lambda *_: None)
+    nested.run_index(c, [('k1', w, N1), ('k2', w, N2)], '/exports/gt', workers=1, log=lambda *_: None); assert c.execute('SELECT COUNT(*) FROM entries').fetchone()[0] == n      # no duplicates on a re-run
+    nested.run_index(c, [('k3', str(tmp_path / 'missing.zip'), N1)], '/exports/gt', workers=1, log=lambda *_: None)
     assert c.execute("SELECT indexed, note FROM units WHERE key='k3'").fetchone()[0] == 1 and c.execute("SELECT note FROM units WHERE key='k3'").fetchone()[0]
 
 def test_paths_use_the_same_rules_as_the_main_tree():
-    assert nested.rel_of('Takeout/Google Photos/a.jpg', '/srv/exports/gt') == 'Google Photos/a.jpg'
-    long = nested.rel_of('Takeout/Drive/' + 'q' * 300 + '.txt', '/srv/exports/gt'); assert '~' in long and len(long.split('/')[-1].encode()) <= 200
+    assert nested.rel_of('Takeout/Google Photos/a.jpg', '/exports/gt') == 'Google Photos/a.jpg'
+    long = nested.rel_of('Takeout/Drive/' + 'q' * 300 + '.txt', '/exports/gt'); assert '~' in long and len(long.split('/')[-1].encode()) <= 200

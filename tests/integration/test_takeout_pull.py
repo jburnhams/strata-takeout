@@ -11,7 +11,7 @@ def env(tmp_path):
     bin_ = tmp_path / 'bin'; bin_.mkdir(); log = tmp_path / 'rclone.log'
     (bin_ / 'rclone').write_text(f'#!/bin/bash\necho "$@" >> {log}\ncase "$1" in lsf) [ -n "${{RCLONE_EMPTY:-}}" ] || echo a.zip;; esac; exit 0\nexit 0\n'); (bin_ / 'rclone').chmod(0o755)
     (bin_ / 'ntfy').write_text(f'#!/bin/bash\necho "$@" >> {tmp_path}/ntfy.log\n'); (bin_ / 'ntfy').chmod(0o755)
-    e = dict(os.environ, PATH=f'{bin_}:{os.environ["PATH"]}', EXPORTS_ROOT=str(tmp_path / 'ex'), STAGE=str(tmp_path / 'stage'), XDG_RUNTIME_DIR=str(tmp_path), XDG_STATE_HOME=str(tmp_path / 'state'), NTFY_SEND=str(bin_ / 'ntfy'), MIN_FREE_GB='0', FREE_GB='3000')
+    e = dict(os.environ, PATH=f'{bin_}:{os.environ["PATH"]}', EXPORTS_ROOT=str(tmp_path / 'ex'), TAKEOUT_REMOTE='remote:Takeout', STAGE=str(tmp_path / 'stage'), XDG_RUNTIME_DIR=str(tmp_path), XDG_STATE_HOME=str(tmp_path / 'state'), NTFY_SEND=str(bin_ / 'ntfy'), MIN_FREE_GB='0', FREE_GB='3000')
     def run(*args, **kw): return subprocess.run(['bash', SCRIPT, *args], env={**e, **kw}, capture_output=True, text=True, timeout=60)
     return type('E', (), dict(run=staticmethod(run), log=log, ntfy=tmp_path / 'ntfy.log'))
 

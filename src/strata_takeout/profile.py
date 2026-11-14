@@ -3,6 +3,7 @@
 `takeout`  Google Takeout (strip 1: Takeout/, skip Drive/Takeout/); archives are found in `done_dir` with extraction-order markers in `marker_dir`.
 Config `renamed_tsv`: the extractor's rename log (archive, original path, stored path); a path it moved aside (a file sharing a name with a folder becomes `<name>~file`) is recorded
 under the name it really has on disk.
+`takeout` also gives filecat labels: the people listed in Google Photos sidecars (sidecar.py).
 `export`   any other platform extracted by strata-takeout-inbox. Config: `strip` (default 0), `nested` (A/B path to skip, default none),
            `done_dir` (finished archives, ingested by `filecat run` if the inbox could not record them itself).
 Duck-typed against filecat's profile interface, so this package does not import filecat.
@@ -11,6 +12,7 @@ Duck-typed against filecat's profile interface, so this package does not import 
 import os
 import re
 
+from . import sidecar
 from .paths import clean_parts, safe_parts
 
 ARCHIVES = (".zip", ".tgz", ".tar", ".tar.gz")
@@ -78,3 +80,12 @@ class Export:
 
 class Takeout(Export):
     STRIP, NESTED = 1, ("Drive", "Takeout")
+
+    # Labels for filecat (`filecat labels`): the people Google Photos lists in a photo's sidecar.
+    label_exts = sidecar.MEDIA
+
+    def labels(self, rel):
+        """[("person", name), ...] from the sidecar next to the media file `rel`, or None when it has none."""
+        d, n = os.path.split(os.path.join(self.dest, rel))
+        path = sidecar.find(d, n)
+        return None if path is None else [("person", name) for name in sidecar.people(path)]

@@ -17,14 +17,17 @@ MEDIA = (".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".he
 
 
 def candidates(name):
-    """Sidecar file names that may belong to the media file `name`, most likely first."""
+    """Sidecar file names that may belong to the media file `name`, most likely first.
+
+    A numbered duplicate (`name(1).jpg`) tries the duplicate-aware names (`name.jpg.supplemental-metadata(1).json`) before
+    the literal ones: a literal name that gets cut at 46 characters loses its `(1)` and would then be the original's sidecar."""
     base, ext = os.path.splitext(name)
-    variants = [(base, ext, "")]  # (stem, ext, duplicate suffix such as "(1)")
     m = re.fullmatch(r"(.*)(\(\d+\))", base)
-    if m:
-        variants.append((m.group(1), ext, m.group(2)))
+    variants = ([(m.group(1), ext, m.group(2))] if m else []) + [(base, ext, "")]  # (stem, ext, duplicate suffix "(1)")
     for stem, e, dup in list(variants):
-        m = re.fullmatch(r"(.*)-edit(?:ed?)?", stem)
+        m = re.fullmatch(
+            r"(.*)-edit(?:ed?)?", stem
+        )  # an edited copy uses the original's sidecar; Google may cut the name
         if m:
             variants.append((m.group(1), e, dup))
     out = []
@@ -38,14 +41,11 @@ def candidates(name):
 
 
 def find(directory, name):
-    """Path of the sidecar of `name` in `directory`, or None."""
-    try:
-        present = set(os.listdir(directory))
-    except OSError:
-        return None
+    """Path of the sidecar of `name` in `directory`, or None (a few stat calls: no directory listing per photo)."""
     for c in candidates(name):
-        if c in present:
-            return os.path.join(directory, c)
+        path = os.path.join(directory, c)
+        if os.path.isfile(path):
+            return path
     return None
 
 

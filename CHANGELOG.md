@@ -8,7 +8,7 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 - `src/strata_takeout/sidecar.py`: **new**. `candidates(name)` lists the sidecar names Google may have used (cut at 46 characters before `.json`, `name(1).jpg` -> `name.jpg.supplemental-metadata(1).json`, `-edited` copies use the original's sidecar, older `<file>.json`); `find`, `people`.
 - `profile.py`: `Takeout.label_exts` (image extensions) and `Takeout.labels(rel)` -> `[("person", name)]` or None when there is no sidecar.
-- Tests: `tests/unit/test_sidecar.py` (synthetic files only). On a real export the name rules match a sidecar for 99.0% of the images in the Google Photos folder.
+- Tests: `tests/unit/test_sidecar.py` (synthetic files only), including a long-named duplicate whose truncated literal name would otherwise pick up the original's sidecar.
 
 ## 2026-11-10
 

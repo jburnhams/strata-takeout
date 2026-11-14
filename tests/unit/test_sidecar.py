@@ -54,3 +54,15 @@ def test_takeout_profile_labels_files_from_their_sidecars(tmp_path):
     assert p.labels(rel + "a-edited.jpg") == [("person", "Ann")]
     assert p.labels(rel + "nope.heic") is None
     assert ".heic" in p.label_exts and ".txt" not in p.label_exts
+
+
+def test_a_long_named_duplicate_gets_its_own_sidecar_not_the_originals(tmp_path):
+    stem = "x" * 50
+    for n in (f"{stem}.jpg", f"{stem}(1).jpg"):
+        (tmp_path / n).write_bytes(b"1")
+    original = sidecar.candidates(f"{stem}.jpg")[0]  # the original's (cut) sidecar name
+    dup_name = (f"{stem}.jpg" + sidecar.SUFFIX)[: sidecar.CUT] + "(1).json"
+    (tmp_path / original).write_text(json.dumps({"people": [{"name": "Ann"}]}))
+    (tmp_path / dup_name).write_text(json.dumps({"people": [{"name": "Bo"}]}))
+    assert sidecar.find(str(tmp_path), f"{stem}(1).jpg").endswith(dup_name)
+    assert sidecar.find(str(tmp_path), f"{stem}.jpg").endswith(original)

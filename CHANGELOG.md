@@ -2,6 +2,14 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-15
+
+**Google Photos sidecars give filecat the people in each photo (branch `sidecar-labels`).** Pairs with strata-filecat's file labels (`filecat labels`): the `takeout` profile now says which files can carry labels and reads them.
+
+- `src/strata_takeout/sidecar.py`: **new**. `candidates(name)` lists the sidecar names Google may have used (cut at 46 characters before `.json`, `name(1).jpg` -> `name.jpg.supplemental-metadata(1).json`, `-edited` copies use the original's sidecar, older `<file>.json`); `find`, `people`.
+- `profile.py`: `Takeout.label_exts` (image extensions) and `Takeout.labels(rel)` -> `[("person", name)]` or None when there is no sidecar.
+- Tests: `tests/unit/test_sidecar.py` (synthetic files only). On a real export the name rules match a sidecar for 99.0% of the images in the Google Photos folder.
+
 ## 2026-11-10
 
 **Move to uv, ruff, pyright and the shared strata-python gate (branch `claude/project-thread-iw7199`)**

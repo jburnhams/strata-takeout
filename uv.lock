@@ -949,8 +949,8 @@ wheels = [
 
 [[package]]
 name = "strata-python"
-version = "0.1.0"
-source = { git = "https://github.com/jburnhams/strata-python#6395d3c7692912200082e7397367ea948be513ca" }
+version = "0.2.3"
+source = { git = "https://github.com/jburnhams/strata-python#0a55667b1d12e9e588065a69fcd46a70aa620b6d" }
 dependencies = [
     { name = "fastapi" },
     { name = "pydantic" },

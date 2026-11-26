@@ -51,7 +51,7 @@ def mbox(tmp_path):
 def test_rules():
     assert rules.tier(["sent"], "me@example.org", False, False) == ("keep", "sent")
     assert rules.tier(["inbox", "category personal"], "a@b.c", False, False) == ("keep", "personal")
-    assert rules.tier(["inbox"], "a@b.c", False, False) == ("keep", "personal")  # uncategorised
+    assert rules.tier(["inbox"], "a@b.c", False, False) == ("other", "uncategorised")  # left to a later step
     assert rules.tier(["category promotions"], "a@b.c", False, False)[0] == "other"
     assert rules.tier(["inbox", "category personal"], "a@b.c", True, False) == ("other", "bulk")
     assert rules.tier(["inbox"], "no-reply@b.c", False, False) == ("other", "automated-sender")

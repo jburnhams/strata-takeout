@@ -134,3 +134,24 @@ def test_account_specs(tmp_path):
         cli.accounts("")
     with pytest.raises(ValueError):
         cli.accounts("nonsense")
+
+
+def test_attached_message_is_an_attachment_not_body(tmp_path):
+    inner = "From: <x@example.org>\nSubject: inner\n\ninner text\n"
+    raw = (
+        "From: <a@example.org>\nSubject: fwd\nMIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=B\n\n"
+        "--B\nContent-Type: text/plain\n\nouter text\n--B\nContent-Type: message/rfc822\n"
+        'Content-Disposition: attachment; filename="forward.eml"\n\n' + inner + "--B--\n"
+    ).encode()
+    text, files = parse.body(raw)
+    assert text == "outer text" and [f["filename"] for f in files] == ["forward.eml"]
+    assert b"inner text" in files[0]["data"]
+    assert parse.sizes(raw)[1] > 0
+
+
+def test_fill_refuses_a_changed_mbox(db_session, mbox):
+    ingest.sync_account(db_session, "main", str(mbox), None)
+    db_session.flush()
+    mbox.write_text(mbox.read_text() + "\n")
+    with pytest.raises(ValueError, match="not the mbox loaded"):
+        ingest.fill(db_session, "main", ingest.SOURCE, str(mbox), None)

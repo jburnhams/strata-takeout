@@ -38,7 +38,12 @@ def store_file(root: str, data: bytes) -> tuple[str, str]:
 
 
 def fill(session: Session, account: str, source: str, mbox: str, root: str | None, limit: int | None = None) -> int:
-    """Body and attachments for kept messages that have none yet. Returns how many were filled."""
+    """Body and attachments for kept messages that have none yet. Returns how many were filled. Refuses an mbox that is
+    not the one the rows were loaded from (offsets of another file would attach the wrong message): resync first."""
+    src = session.get(Source, (account, source))
+    st = os.stat(mbox)
+    if src is None or (src.size, src.mtime_ns, src.path) != (st.st_size, st.st_mtime_ns, mbox):
+        raise ValueError(f"{mbox} is not the mbox loaded for {account}/{source}: run sync (or ingest --force) first")
     q = (
         select(Message.id, Message.mbox_offset, Message.mbox_size)
         .where(
@@ -143,21 +148,18 @@ def sync_account(
     if not force and prev and (prev.size, prev.mtime_ns, prev.path) == (st.st_size, st.st_mtime_ns, mbox):
         return None
     counts = load(session, account, SOURCE, mbox)
-    session.flush()
-    counts["filled"] = fill(session, account, SOURCE, mbox, root)
     now = datetime.now(UTC)
     if prev is None:
-        session.add(
-            Source(
-                account=account,
-                source=SOURCE,
-                path=mbox,
-                size=st.st_size,
-                mtime_ns=st.st_mtime_ns,
-                rows=counts["messages"],
-                loaded_at=now,
-            )
+        prev = Source(
+            account=account,
+            source=SOURCE,
+            path=mbox,
+            size=st.st_size,
+            mtime_ns=st.st_mtime_ns,
+            rows=counts["messages"],
+            loaded_at=now,
         )
+        session.add(prev)
     else:
         prev.path, prev.size, prev.mtime_ns, prev.rows, prev.loaded_at = (
             mbox,
@@ -166,4 +168,6 @@ def sync_account(
             counts["messages"],
             now,
         )
+    session.flush()  # fill checks the fingerprint it finds here
+    counts["filled"] = fill(session, account, SOURCE, mbox, root)
     return counts

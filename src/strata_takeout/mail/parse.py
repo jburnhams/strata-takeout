@@ -113,6 +113,15 @@ def _text_of(part: Message) -> str:
     return payload
 
 
+def _parts(part: Message) -> Iterator[Message]:
+    """Like `walk()`, but an attached message (message/rfc822) is yielded whole and not entered: its text is the
+    attachment's, not the parent's body."""
+    yield part
+    if part.get_content_type() != "message/rfc822" and part.is_multipart():
+        for sub in part.iter_parts():  # type: ignore[attr-defined]
+            yield from _parts(sub)
+
+
 def body(raw: bytes) -> tuple[str, list[dict]]:
     """(text, attachments) of one message: the text/plain parts (the HTML ones, tags stripped, only when there is no
     plain part), and each attachment as {filename, mime, data}."""
@@ -120,10 +129,16 @@ def body(raw: bytes) -> tuple[str, list[dict]]:
     plain: list[str] = []
     html: list[str] = []
     files: list[dict] = []
-    for part in m.walk():
+    for part in _parts(m):
+        ctype = part.get_content_type()
+        if ctype == "message/rfc822":
+            inner = part.get_payload()
+            data = inner[0].as_bytes() if isinstance(inner, list) and inner else b""
+            if data:
+                files.append(dict(filename=part.get_filename(), mime=ctype, data=data))
+            continue
         if part.is_multipart():
             continue
-        ctype = part.get_content_type()
         disp = str(part.get("Content-Disposition") or "").split(";", 1)[0].strip().lower()
         name = part.get_filename()
         if disp == "attachment" or name or not ctype.startswith("text/"):
@@ -150,10 +165,10 @@ def sizes(raw: bytes) -> tuple[int, int]:
     """(text bytes, attachment bytes) estimated without decoding: the raw size of the text parts and of the others."""
     m: EmailMessage = email.message_from_bytes(raw, policy=POLICY)  # type: ignore[assignment]
     text = att = 0
-    for part in m.walk():
-        if part.is_multipart():
+    for part in _parts(m):
+        if part.is_multipart() and part.get_content_type() != "message/rfc822":
             continue
-        n = len(part.get_payload() or "")
+        n = len(part.as_bytes()) if part.get_content_type() == "message/rfc822" else len(part.get_payload() or "")
         if part.get_content_type().startswith("text/") and not part.get_filename():
             text += n
         else:

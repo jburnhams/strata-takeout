@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 
 [[package]]
@@ -470,7 +470,7 @@ wheels = [
 [[package]]
 name = "omarchy-db"
 version = "0.1.0"
-source = { git = "https://github.com/jburnhams/database?subdirectory=python#116db2d88af4a9990632e3e9f2ba61a9fa9c59bb" }
+source = { git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw#5819cf846c901b356b4b19a16a61458167e10b6e" }
 dependencies = [
     { name = "alembic" },
     { name = "psycopg", extra = ["binary"] },
@@ -965,6 +965,10 @@ version = "0.1.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
+whatsapp = [
+    { name = "omarchy-db" },
+    { name = "strata-python" },
+]
 youtube = [
     { name = "omarchy-db" },
     { name = "strata-python" },
@@ -987,15 +991,17 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "omarchy-db", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/database?subdirectory=python" },
+    { name = "omarchy-db", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw" },
+    { name = "omarchy-db", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw" },
+    { name = "strata-python", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/strata-python" },
 ]
-provides-extras = ["youtube"]
+provides-extras = ["youtube", "whatsapp"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "diff-cover" },
-    { name = "omarchy-db", git = "https://github.com/jburnhams/database?subdirectory=python" },
+    { name = "omarchy-db", git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw" },
     { name = "pyright" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },

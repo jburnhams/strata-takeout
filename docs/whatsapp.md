@@ -27,5 +27,5 @@ strata-takeout-whatsapp sync                                               # eve
 
 ## Gotchas
 - Old databases declare `media_wa_type` as TEXT; sizes can be junk (loaded as NULL); timestamps outside 2001-2100 load as NULL.
-- Media is matched by file name: two media files with the same name in different folders resolve to the first found.
+- Media is matched by file name (two files with the same name in different folders resolve to the first found); when that finds nothing, by the backup's SHA-256 among files of the same size, which also finds renamed or moved files and files in subfolders.
 - Message text is personal data: nothing here logs it, and tests use synthetic databases only.

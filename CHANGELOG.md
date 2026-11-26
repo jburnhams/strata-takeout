@@ -4,6 +4,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-26
 
+**WhatsApp: media found by content hash, installed by `scripts/install.sh`**
+A message whose file name matches nothing in the media folders is now looked up by the backup's own SHA-256 (`media_hash`, base64) among the files of the same size, so renamed or moved files (and files in subfolders such as chat-export folders) link up. Only candidates of the right size are hashed. The media fingerprint now covers file sizes too. `scripts/install.sh` installs the `[whatsapp]` extra and links `strata-takeout-whatsapp` into `~/.local/bin`.
+
 **WhatsApp: a decrypted Android backup into the shared database (`strata-takeout-whatsapp`)**
 First WhatsApp source: the old-format `msgstore.db` (+ `wa.db`) of a decrypted Android backup. See `docs/whatsapp.md`.
 

@@ -194,3 +194,42 @@ def test_moved_media_or_replaced_contacts_reload_an_unchanged_database(db_sessio
     os.replace(wa + ".new", wa)  # same size, older mtime than msgstore.db
     os.utime(wa, ns=(st.st_atime_ns, st.st_mtime_ns - 10**9))
     assert ingest.sync_account(db_session, "main", str(tree), [str(media)]) is not None
+
+
+def test_a_renamed_file_is_found_by_the_backups_content_hash(tmp_path):
+    import base64
+    import hashlib
+
+    content = b"photo bytes"
+    b64 = base64.b64encode(hashlib.sha256(content).digest()).decode()
+    media = tmp_path / "media" / "exports"
+    media.mkdir(parents=True)
+    (media / "20150101-PHOTO-0001.jpg").write_bytes(content)  # another name, in a subfolder
+    (media / "same-size-other-bytes.jpg").write_bytes(b"x" * len(content))
+    db = tmp_path / "msgstore.db"
+    make_msgstore(
+        db,
+        [
+            dict(m=(1, "a@s.whatsapp.net", 0, "K1", 0, None, T0, "1", len(content), "IMG-gone.jpg", None)),
+            dict(m=(2, "a@s.whatsapp.net", 0, "K2", 0, None, T0, "1", len(content), "IMG-other.jpg", None)),
+        ],
+    )
+    con = sqlite3.connect(db)
+    con.execute("UPDATE messages SET media_hash = ? WHERE _id = 1", (b64,))
+    con.execute("UPDATE messages SET media_hash = ? WHERE _id = 2", ("not-the-hash",))
+    con.commit()
+    con.close()
+    found = parse.index_media([str(tmp_path / "media")])
+    rows = {m["row_id"]: m for m in parse.messages(parse.open_ro(str(db)), found)}
+    assert rows[1]["media_file"] == os.path.join("exports", "20150101-PHOTO-0001.jpg")
+    assert rows[2]["media_file"] is None  # same size is not enough
+
+
+def test_signature_sees_a_moved_file_hidden_by_a_name_clash(tmp_path):
+    for d in ("a", "b"):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "shared.jpg").write_bytes(b"x" * (3 if d == "a" else 4))
+    before = parse.index_media([str(tmp_path / "a"), str(tmp_path / "b")]).signature()
+    (tmp_path / "b" / "new").mkdir()
+    os.rename(tmp_path / "b" / "shared.jpg", tmp_path / "b" / "new" / "shared.jpg")  # the hidden duplicate moves
+    assert parse.index_media([str(tmp_path / "a"), str(tmp_path / "b")]).signature() != before

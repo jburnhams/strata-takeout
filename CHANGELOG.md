@@ -2,6 +2,15 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-26 (later)
+
+**Mail: an mbox (Gmail Takeout) into the shared database, keeping only what the rules say is worth keeping (`strata-takeout-mail`)**
+First mail source. Every message gets a metadata row; bodies and attachments are stored only for messages marked `keep`. See `docs/mail.md`.
+
+- `src/strata_takeout/mail/`: models (schema `mail`: `accounts`, `sources`, `messages`, `attachments`), a streaming mbox scanner (the 20 GB file is never loaded; each message is re-read by byte offset), `rules.py` (keep: Sent, Gmail keep labels, senders the owner has written to; drop: bulk headers and junk labels with no keep signal; the rest `undecided` for a classifier; keep wins a conflict) and an idempotent loader (fingerprint in `sources`, replace per (account, source) in one transaction; attachments written content-addressed under a root the job passes). CLI `strata-takeout-mail sync|ingest|refill|doctor|set`; accounts and the attachments folder come from settings, never defaults. Install extra `[mail]`.
+- `migrations_mail/`, `[tool.omarchy-db.apps.mail]`: the third schema of this repo.
+- `refill` reads bodies for rows a classifier has since moved to `keep`, without rescanning. Not yet: the classifier, embeddings, IMAP sources.
+
 ## 2026-11-26
 
 **WhatsApp: a decrypted Android backup into the shared database (`strata-takeout-whatsapp`)**

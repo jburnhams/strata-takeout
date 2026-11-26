@@ -46,7 +46,7 @@ default-groups = ["dev"]
 [tool.uv.sources]
 # strata-python tracks main (no tag): uv.lock pins the commit, `uv lock --upgrade-package strata-python` moves it
 strata-python = { git = "https://github.com/jburnhams/strata-python" }
-omarchy-db = { git = "https://github.com/jburnhams/database", subdirectory = "python", branch = "claude/project-thread-jsdtrw" }   # TEMPORARY: multi-app support (database PR 15); back to main once merged
+omarchy-db = { git = "https://github.com/jburnhams/database", subdirectory = "python" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/strata_takeout"]

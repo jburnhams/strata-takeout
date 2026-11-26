@@ -8,7 +8,7 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 First WhatsApp source: the old-format `msgstore.db` (+ `wa.db`) of a decrypted Android backup. See `docs/whatsapp.md`.
 
 - `src/strata_takeout/whatsapp/`: models (schema `whatsapp`: `accounts`, `sources`, `chats`, `contacts`, `participants`, `messages`), a tolerant read-only parser (a missing column reads as NULL; `media_wa_type` is TEXT in old files; junk sizes and times become NULL), and an idempotent loader (fingerprint in `sources`, replace per (account, source) in one transaction; media found by basename under the configured folders, and newly added media triggers a reload). CLI `strata-takeout-whatsapp sync|ingest|doctor|set`; accounts and media folders come from settings, never defaults. Install extra `[whatsapp]`.
-- `migrations_whatsapp/`, `[tool.omarchy-db.apps.whatsapp]`: the second schema of this repo, which needs the database library's multi-app support (omarchy-db is pinned to that branch until [database PR 15](https://github.com/jburnhams/database/pull/15) merges).
+- `migrations_whatsapp/`, `[tool.omarchy-db.apps.whatsapp]`: the second schema of this repo, which needs the database library's multi-app support (needs [database PR 15](https://github.com/jburnhams/database/pull/15), merged).
 - Not loaded yet: chat exports (`_chat.txt`), the new-format `message` table, call log, quotes and receipts, the iOS backup.
 
 ## 2026-11-10

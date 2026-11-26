@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 
 [[package]]
@@ -965,6 +965,10 @@ version = "0.1.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
+gmail = [
+    { name = "omarchy-db" },
+    { name = "strata-python" },
+]
 whatsapp = [
     { name = "omarchy-db" },
     { name = "strata-python" },
@@ -991,12 +995,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "omarchy-db", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/database?subdirectory=python" },
+    { name = "strata-python", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/strata-python" },
 ]
-provides-extras = ["youtube", "whatsapp"]
+provides-extras = ["youtube", "whatsapp", "gmail"]
 
 [package.metadata.requires-dev]
 dev = [

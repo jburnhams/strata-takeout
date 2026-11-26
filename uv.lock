@@ -470,7 +470,7 @@ wheels = [
 [[package]]
 name = "omarchy-db"
 version = "0.1.0"
-source = { git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw#5819cf846c901b356b4b19a16a61458167e10b6e" }
+source = { git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw#7f6a75e4bfa8e0fb928c21354c33651f6a2661b4" }
 dependencies = [
     { name = "alembic" },
     { name = "psycopg", extra = ["binary"] },

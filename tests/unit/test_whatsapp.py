@@ -159,3 +159,38 @@ def test_settings_parsing():
         cli.accounts("nonsense")
     with pytest.raises(ValueError):
         cli.media("main")
+
+
+def test_zero_coordinates_survive_on_location_messages_only(tmp_path):
+    db = tmp_path / "msgstore.db"
+    make_msgstore(
+        db,
+        [
+            dict(m=(1, "a@s.whatsapp.net", 0, "K1", 0, None, T0, "5", None, None, None)),
+            dict(m=(2, "a@s.whatsapp.net", 0, "K2", 0, "x", T0, "0", None, None, None)),
+        ],
+    )
+    con = sqlite3.connect(db)
+    con.execute("UPDATE messages SET latitude = 0.0, longitude = 20.5")
+    con.commit()
+    con.close()
+    rows = {m["row_id"]: m for m in parse.messages(parse.open_ro(str(db)), {})}
+    assert (rows[1]["latitude"], rows[1]["longitude"]) == (0.0, 20.5)  # equator is a position
+    assert (rows[2]["latitude"], rows[2]["longitude"]) == (None, 20.5)  # 0.0 on a text message is "none"
+
+
+def test_moved_media_or_replaced_contacts_reload_an_unchanged_database(db_session, backup):
+    tree, media = backup
+    ingest.sync_account(db_session, "main", str(tree), [str(media)])
+    db_session.flush()
+    os.rename(media / "sub" / "IMG-1.jpg", media / "IMG-1.jpg")  # same name count, new path
+    assert ingest.sync_account(db_session, "main", str(tree), [str(media)]) is not None
+    db_session.flush()
+    assert db_session.scalar(select(Message.media_file).where(Message.row_id == 2)) == "IMG-1.jpg"
+    assert ingest.sync_account(db_session, "main", str(tree), [str(media)]) is None
+    wa = ingest.find_db(str(tree), "wa.db")
+    st = os.stat(wa)
+    make_wa(wa + ".new")
+    os.replace(wa + ".new", wa)  # same size, older mtime than msgstore.db
+    os.utime(wa, ns=(st.st_atime_ns, st.st_mtime_ns - 10**9))
+    assert ingest.sync_account(db_session, "main", str(tree), [str(media)]) is not None

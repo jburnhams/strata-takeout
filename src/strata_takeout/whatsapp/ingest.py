@@ -3,6 +3,7 @@
 changed or new one replaces every row of its (account, source) in one transaction, so a re-run never duplicates."""
 
 import glob
+import hashlib
 import os
 from datetime import UTC, datetime
 
@@ -76,11 +77,14 @@ def sync_account(
         return {}
     wa_db = find_db(os.path.dirname(db), "wa.db")
     roots = [r for r in media_roots if os.path.isdir(r)]
-    sts = [os.stat(p) for p in (db, wa_db) if p]
+    st, wa_st = os.stat(db), os.stat(wa_db) if wa_db else None
     found = parse.index_media(roots)
-    key = "|".join([db, wa_db or "", *roots, f"media={len(found)}"])  # media added later re-resolves the rows
-    size = sum(s.st_size for s in sts)
-    mtime = max(s.st_mtime_ns for s in sts)
+    # everything the rows depend on: each database's own size and mtime, and which file name sits at which path (a
+    # moved or replaced media file changes `media_file`), so any of them reloads
+    mapping = hashlib.sha256("\0".join(f"{k}\0{v}" for k, v in sorted(found.items())).encode()).hexdigest()
+    wa_key = f"{wa_st.st_size}:{wa_st.st_mtime_ns}" if wa_st else ""
+    key = "|".join([db, wa_db or "", wa_key, *roots, f"media={len(found)}:{mapping}"])
+    size, mtime = st.st_size, st.st_mtime_ns
     acct = session.get(Account, account)
     if acct is None:
         session.add(Account(id=account, label=label))

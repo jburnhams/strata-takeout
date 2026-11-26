@@ -74,6 +74,12 @@ def to_int(v) -> int | None:
         return None
 
 
+def _coord(v, kind: str) -> float | None:
+    if not isinstance(v, int | float):
+        return None
+    return float(v) if v != 0 or kind == "location" else None
+
+
 def clean_size(v) -> int | None:
     n = to_int(v)
     return n if n is not None and 0 <= n < MAX_SIZE else None
@@ -146,6 +152,7 @@ def messages(con: sqlite3.Connection, found: dict[str, str]) -> Iterator[dict]:
             (found[b] for b in (os.path.basename(path or ""), os.path.basename(name or "")) if b in found), None
         )
         sender = r["remote_resource"] or None
+        kind = kind_of(type_code, status)
         yield dict(
             row_id=r["_id"],
             chat_jid=r["key_remote_jid"],
@@ -153,7 +160,7 @@ def messages(con: sqlite3.Connection, found: dict[str, str]) -> Iterator[dict]:
             from_me=bool(r["key_from_me"]),
             sender_jid=sender if sender != r["key_remote_jid"] else None,
             at=to_time(r["timestamp"]),
-            kind=kind_of(type_code, status),
+            kind=kind,
             type_code=type_code,
             status=status,
             text=r["data"] if r["data"] != "" else None,
@@ -165,8 +172,9 @@ def messages(con: sqlite3.Connection, found: dict[str, str]) -> Iterator[dict]:
             media_hash=r["media_hash"] or None,
             media_path=path,
             media_file=file,
-            latitude=r["latitude"] if r["latitude"] else None,
-            longitude=r["longitude"] if r["longitude"] else None,
+            # old rows hold 0.0 for "no position"; a real 0.0 only means something on a location message
+            latitude=_coord(r["latitude"], kind),
+            longitude=_coord(r["longitude"], kind),
             starred=bool(r["starred"]),
         )
 

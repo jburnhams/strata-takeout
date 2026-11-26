@@ -3,7 +3,6 @@
 changed or new one replaces every row of its (account, source) in one transaction, so a re-run never duplicates."""
 
 import glob
-import hashlib
 import os
 from datetime import UTC, datetime
 
@@ -28,7 +27,7 @@ def find_db(tree: str, name: str = "msgstore.db") -> str | None:
 
 
 def load(
-    session: Session, account: str, source: str, db: str, wa_db: str | None, found: dict[str, str]
+    session: Session, account: str, source: str, db: str, wa_db: str | None, found: parse.MediaIndex
 ) -> dict[str, int]:
     for t in (Message, Chat, Contact, Participant):
         session.execute(delete(t).where(t.account == account, t.source == source))
@@ -81,7 +80,7 @@ def sync_account(
     found = parse.index_media(roots)
     # everything the rows depend on: each database's own size and mtime, and which file name sits at which path (a
     # moved or replaced media file changes `media_file`), so any of them reloads
-    mapping = hashlib.sha256("\0".join(f"{k}\0{v}" for k, v in sorted(found.items())).encode()).hexdigest()
+    mapping = found.signature()
     wa_key = f"{wa_st.st_size}:{wa_st.st_mtime_ns}" if wa_st else ""
     key = "|".join([db, wa_db or "", wa_key, *roots, f"media={len(found)}:{mapping}"])
     size, mtime = st.st_size, st.st_mtime_ns

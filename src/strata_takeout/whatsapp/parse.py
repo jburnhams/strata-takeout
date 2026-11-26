@@ -3,6 +3,8 @@ holds) and its companion `wa.db` (contacts). Read-only, standard library only, t
 not there reads as NULL, so a database from an older or newer app version loads with fewer fields instead of failing.
 Never prints or logs message text."""
 
+import base64
+import hashlib
 import os
 import sqlite3
 from collections.abc import Iterator
@@ -85,14 +87,50 @@ def clean_size(v) -> int | None:
     return n if n is not None and 0 <= n < MAX_SIZE else None
 
 
-def index_media(roots: list[str]) -> dict[str, str]:
-    """basename -> path relative to its root, for every file under the media roots (first root wins on a clash).
-    Old backups keep media loose in one folder, so the basename is the key WhatsApp's own paths end in."""
-    out: dict[str, str] = {}
+class MediaIndex(dict[str, str]):
+    """basename -> path relative to its root (first root wins on a clash), for every file under the media roots, plus
+    the files by size, so a message whose name matches nothing can still be found by WhatsApp's own content hash."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.by_size: dict[int, list[tuple[str, str]]] = {}  # size -> [(relative path, absolute path)]
+        self._hashes: dict[str, str] = {}
+
+    def by_hash(self, size: int | None, b64sha256: str | None) -> str | None:
+        """Relative path of a file of this size whose SHA-256 (base64, as the backup stores it) is `b64sha256`."""
+        if not size or not b64sha256:
+            return None
+        for rel, path in self.by_size.get(size, ()):
+            if path not in self._hashes:
+                with open(path, "rb") as f:
+                    self._hashes[path] = base64.b64encode(hashlib.file_digest(f, "sha256").digest()).decode()
+            if self._hashes[path] == b64sha256:
+                return rel
+        return None
+
+    def signature(self) -> str:
+        """Changes when a file appears, goes, moves, or changes size: what a reload of the media links depends on."""
+        h = hashlib.sha256()
+        for name, rel in sorted(self.items()):
+            h.update(f"{name}\0{rel}\0".encode())
+        for size, files in sorted(self.by_size.items()):
+            h.update(f"{size}:{len(files)}\0".encode())
+        return h.hexdigest()
+
+
+def index_media(roots: list[str]) -> MediaIndex:
+    """Old backups keep media loose in one folder, so the basename is the key WhatsApp's own paths end in."""
+    out = MediaIndex()
     for root in roots:
         for dirpath, _dirs, files in os.walk(root):
             for f in files:
-                out.setdefault(f, os.path.relpath(os.path.join(dirpath, f), root))
+                path = os.path.join(dirpath, f)
+                rel = os.path.relpath(path, root)
+                out.setdefault(f, rel)
+                try:
+                    out.by_size.setdefault(os.stat(path).st_size, []).append((rel, path))
+                except OSError:
+                    continue  # vanished while walking
     return out
 
 
@@ -107,7 +145,7 @@ def media_files(con: sqlite3.Connection) -> dict[int, str]:
     }
 
 
-def messages(con: sqlite3.Connection, found: dict[str, str]) -> Iterator[dict]:
+def messages(con: sqlite3.Connection, found: MediaIndex | dict[str, str]) -> Iterator[dict]:
     """One dict per row of `messages`, ordered by row id. `found` is index_media()'s result."""
     cols = columns(con, "messages")
     if not {"_id", "key_remote_jid"} <= cols:
@@ -151,6 +189,11 @@ def messages(con: sqlite3.Connection, found: dict[str, str]) -> Iterator[dict]:
         file = next(
             (found[b] for b in (os.path.basename(path or ""), os.path.basename(name or "")) if b in found), None
         )
+        size = clean_size(r["media_size"])
+        if file is None and isinstance(
+            found, MediaIndex
+        ):  # nothing by name: the content hash finds moved or renamed files
+            file = found.by_hash(size, r["media_hash"])
         sender = r["remote_resource"] or None
         kind = kind_of(type_code, status)
         yield dict(
@@ -167,7 +210,7 @@ def messages(con: sqlite3.Connection, found: dict[str, str]) -> Iterator[dict]:
             caption=r["media_caption"] or None,
             media_mime=r["media_mime_type"] or None,
             media_name=name or None,
-            media_size=clean_size(r["media_size"]),
+            media_size=size,
             media_seconds=to_int(r["media_duration"]),
             media_hash=r["media_hash"] or None,
             media_path=path,

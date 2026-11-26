@@ -47,11 +47,16 @@ def split(path: str, batch: int = BATCH) -> Iterator[list[tuple[int, bytes]]]:
         yield out
 
 
+def clean(s: str) -> str:
+    """Postgres text cannot hold NUL, and mail has them (in subjects, bodies, file names): drop them."""
+    return s.replace("\x00", "")
+
+
 def header(v: object) -> str:
     try:
-        return re.sub(r"\s+", " ", str(make_header(decode_header(str(v or ""))))).strip()
+        return clean(re.sub(r"\s+", " ", str(make_header(decode_header(str(v or ""))))).strip())
     except Exception:  # a malformed encoded word must not lose the message
-        return re.sub(r"\s+", " ", str(v or "")).strip()
+        return clean(re.sub(r"\s+", " ", str(v or "")).strip())
 
 
 def when(m: Message) -> datetime | None:
@@ -84,7 +89,7 @@ def text_of(part: Message) -> str:
         t = raw.decode("utf-8", "replace")
     if part.get_content_type() == "text/html":
         t = html.unescape(TAG.sub(" ", BLOCK.sub("\n", t)))
-    return re.sub(r"[ \t\r\f\v]+", " ", re.sub(r"\n\s*\n+", "\n\n", t)).strip()
+    return clean(re.sub(r"[ \t\r\f\v]+", " ", re.sub(r"\n\s*\n+", "\n\n", t)).strip())
 
 
 def store(data: bytes, folder: str, name: str | None) -> tuple[str, str]:

@@ -111,3 +111,10 @@ def test_settings_parsing():
     assert cli.accounts("main:Label=/a/b,other=/c") == [("main", "Label", "/a/b"), ("other", None, "/c")]
     with pytest.raises(SystemExit):
         cli.accounts("")
+
+
+def test_nul_bytes_are_dropped(tmp_path):
+    p = tmp_path / "a.mbox"
+    p.write_text(msg(1, "a@b.c", "Sent", body="te\x00xt", subject="Delivered\x00\x00"))
+    ((m, _),) = list(parse.messages(str(p), None))
+    assert m["subject"] == "Delivered 1" and m["body_text"] == "text"

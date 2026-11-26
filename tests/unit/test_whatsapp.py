@@ -223,3 +223,13 @@ def test_a_renamed_file_is_found_by_the_backups_content_hash(tmp_path):
     rows = {m["row_id"]: m for m in parse.messages(parse.open_ro(str(db)), found)}
     assert rows[1]["media_file"] == os.path.join("exports", "20150101-PHOTO-0001.jpg")
     assert rows[2]["media_file"] is None  # same size is not enough
+
+
+def test_signature_sees_a_moved_file_hidden_by_a_name_clash(tmp_path):
+    for d in ("a", "b"):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "shared.jpg").write_bytes(b"x" * (3 if d == "a" else 4))
+    before = parse.index_media([str(tmp_path / "a"), str(tmp_path / "b")]).signature()
+    (tmp_path / "b" / "new").mkdir()
+    os.rename(tmp_path / "b" / "shared.jpg", tmp_path / "b" / "new" / "shared.jpg")  # the hidden duplicate moves
+    assert parse.index_media([str(tmp_path / "a"), str(tmp_path / "b")]).signature() != before

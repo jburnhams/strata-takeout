@@ -113,8 +113,11 @@ class MediaIndex(dict[str, str]):
         h = hashlib.sha256()
         for name, rel in sorted(self.items()):
             h.update(f"{name}\0{rel}\0".encode())
-        for size, files in sorted(self.by_size.items()):
-            h.update(f"{size}:{len(files)}\0".encode())
+        for size, files in sorted(
+            self.by_size.items()
+        ):  # every file, also those a name clash hides from the dict above
+            for path in sorted(p for _rel, p in files):
+                h.update(f"{size}:{path}\0".encode())
         return h.hexdigest()
 
 

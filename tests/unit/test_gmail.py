@@ -122,12 +122,12 @@ def test_nul_bytes_are_dropped(tmp_path):
 
 def test_attached_message_is_an_attachment_not_body(tmp_path):
     raw = (
-        "From: <a@example.org>\nSubject: fwd\nX-Gmail-Labels: Sent\nMIME-Version: 1.0\n"
-        "Content-Type: multipart/mixed; boundary=B\n\n"
-        "--B\nContent-Type: text/plain\n\nouter text\n--B\nContent-Type: message/rfc822\n"
-        'Content-Disposition: attachment; filename="forward.eml"\n\n'
-        "From: <x@example.org>\nSubject: inner\n\ninner text\n--B--\n"
-    ).encode()
+        b"From: <a@example.org>\nSubject: fwd\nX-Gmail-Labels: Sent\nMIME-Version: 1.0\n"
+        b"Content-Type: multipart/mixed; boundary=B\n\n"
+        b"--B\nContent-Type: text/plain\n\nouter text\n--B\nContent-Type: message/rfc822\n"
+        b'Content-Disposition: attachment; filename="forward.eml"\n\n'
+        b"From: <x@example.org>\nSubject: inner\n\ninner text\n--B--\n"
+    )
     row, atts = parse.message(0, raw, str(tmp_path / "att"))
     assert row["tier"] == "keep" and "inner text" not in (row["body_text"] or "")
     assert [a["filename"] for a in atts] == ["forward.eml"] and atts[0]["size"] > 0

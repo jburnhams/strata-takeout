@@ -4,6 +4,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-26
 
+**Gmail: a Takeout mbox into the shared database (`strata-takeout-gmail`)**
+Schema `gmail` (`accounts`, `sources`, `messages`, `attachments`; `migrations_gmail/`, `[tool.omarchy-db.apps.gmail]`, install extra `[gmail]`). Every message is loaded as metadata; messages the rules pick (sent, and personal received) also keep their body text and attachments (written content-addressed under a folder the job passes). Idempotent: unchanged mbox and rule set are skipped, a changed one replaces its rows. See `docs/gmail.md`.
+
 **WhatsApp: media found by content hash, installed by `scripts/install.sh`**
 A message whose file name matches nothing in the media folders is now looked up by the backup's own SHA-256 (`media_hash`, base64) among the files of the same size, so renamed or moved files (and files in subfolders such as chat-export folders) link up. Only candidates of the right size are hashed. The media fingerprint now covers file sizes too. `scripts/install.sh` installs the `[whatsapp]` extra and links `strata-takeout-whatsapp` into `~/.local/bin`.
 

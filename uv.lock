@@ -470,7 +470,7 @@ wheels = [
 [[package]]
 name = "omarchy-db"
 version = "0.1.0"
-source = { git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw#7f6a75e4bfa8e0fb928c21354c33651f6a2661b4" }
+source = { git = "https://github.com/jburnhams/database?subdirectory=python#8dfd9154e3ca52b0805bb5cb8bbb67b34e1be3e2" }
 dependencies = [
     { name = "alembic" },
     { name = "psycopg", extra = ["binary"] },
@@ -991,8 +991,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "omarchy-db", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw" },
-    { name = "omarchy-db", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw" },
+    { name = "omarchy-db", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/database?subdirectory=python" },
+    { name = "omarchy-db", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "strata-python", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/strata-python" },
 ]
@@ -1001,7 +1001,7 @@ provides-extras = ["youtube", "whatsapp"]
 [package.metadata.requires-dev]
 dev = [
     { name = "diff-cover" },
-    { name = "omarchy-db", git = "https://github.com/jburnhams/database?subdirectory=python&branch=claude%2Fproject-thread-jsdtrw" },
+    { name = "omarchy-db", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "pyright" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },

@@ -40,7 +40,7 @@ def accounts(spec: str) -> list[tuple[str, str | None, str]]:
     return out
 
 
-def _run(todo: list[tuple[str, str | None, str]], folder: str | None, force: bool) -> int:
+def _run(todo: list[tuple[str, str | None, str]], folder: str | None, force: bool, verdicts: str | None = None) -> int:
     from omarchy_db import Project, connect
     from sqlalchemy.orm import Session
 
@@ -54,7 +54,7 @@ def _run(todo: list[tuple[str, str | None, str]], folder: str | None, force: boo
         Project.load(__file__, APP).upgrade(engine)
         for aid, label, tree in todo:
             with Session(engine) as s, s.begin():
-                n = sync_mbox(s, aid, tree, os.path.expanduser(folder) if folder else None, label, force)
+                n = sync_mbox(s, aid, tree, os.path.expanduser(folder) if folder else None, label, force, verdicts)
             print(f"{aid}: " + ("unchanged" if n is None else f"no mbox under {tree}" if n == 0 else f"{n} messages"))
     return 0
 
@@ -77,10 +77,14 @@ def main(argv=None) -> int:
     i.add_argument("tree")
     i.add_argument("--label")
     i.add_argument("--attachments")
+    i.add_argument("--verdicts", help="JSON-lines classifier verdicts: {offset, label, confidence, source}")
     i.add_argument("--force", action="store_true")
     i.set_defaults(
         fn=lambda a: _run(
-            [(a.account, a.label, a.tree)], a.attachments or SETTINGS.get("gmail_attachments") or None, a.force
+            [(a.account, a.label, a.tree)],
+            a.attachments or SETTINGS.get("gmail_attachments") or None,
+            a.force,
+            a.verdicts,
         )
     )
     cli.add_doctor(sub, "strata-takeout-gmail", "0.1.0", ("omarchy_db", "sqlalchemy"))

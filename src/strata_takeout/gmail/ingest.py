@@ -1,6 +1,7 @@
 """Load a Gmail mbox into the `gmail` schema, idempotently: the file's fingerprint (size, mtime) and the rule set's version are kept in `sources`; an
 unchanged one is skipped, a changed or new one (or new rules) replaces every row of its (account, source) in one transaction, so a re-run never duplicates."""
 
+import hashlib
 import os
 from datetime import UTC, datetime
 
@@ -40,7 +41,7 @@ def _flush(session: Session, account: str, batch: list[tuple[dict, list[dict]]])
     session.execute(insert(Attachment), [dict(message_id=ids[m["offset"]], **a) for m, atts in batch for a in atts])
 
 
-def load(session: Session, account: str, path: str, folder: str | None) -> int:
+def load(session: Session, account: str, path: str, folder: str | None, verdicts: dict[int, dict] | None = None) -> int:
     session.execute(
         delete(Attachment).where(
             Attachment.message_id.in_(select(Message.id).where(Message.account == account, Message.source == SOURCE))
@@ -48,7 +49,7 @@ def load(session: Session, account: str, path: str, folder: str | None) -> int:
     )
     session.execute(delete(Message).where(Message.account == account, Message.source == SOURCE))
     n, batch = 0, []
-    for item in parse.messages(path, folder):
+    for item in parse.messages(path, folder, verdicts):
         batch.append(item)
         n += 1
         if len(batch) >= BATCH:
@@ -60,7 +61,13 @@ def load(session: Session, account: str, path: str, folder: str | None) -> int:
 
 
 def sync_mbox(
-    session: Session, account: str, tree: str, folder: str | None, label: str | None = None, force: bool = False
+    session: Session,
+    account: str,
+    tree: str,
+    folder: str | None,
+    label: str | None = None,
+    force: bool = False,
+    verdicts: str | None = None,
 ) -> int | None:
     """Rows loaded, or None when unchanged; 0 when `tree` holds no mbox. The caller commits."""
     path = find_mbox(tree)
@@ -73,14 +80,19 @@ def sync_mbox(
         a = session.get(Account, account)
         a.label = label
     st = os.stat(path)
+    vs = os.stat(verdicts) if verdicts else None
+    # a new verdicts file reloads like new rules do (a short hash of its size and mtime keeps the column small)
+    version = rules.RULES + (
+        f"+{hashlib.sha1(f'{vs.st_size}.{vs.st_mtime_ns}'.encode()).hexdigest()[:12]}" if vs else ""
+    )
     row = session.get(Source, (account, SOURCE))
     if (
         not force
         and row
-        and (row.path, row.size, row.mtime_ns, row.rules) == (path, st.st_size, st.st_mtime_ns, rules.RULES)
+        and (row.path, row.size, row.mtime_ns, row.rules) == (path, st.st_size, st.st_mtime_ns, version)
     ):
         return None
-    n = load(session, account, path, folder)
+    n = load(session, account, path, folder, parse.read_verdicts(verdicts) if verdicts else None)
     now = datetime.now(UTC)
     if row is None:
         session.add(
@@ -90,7 +102,7 @@ def sync_mbox(
                 path=path,
                 size=st.st_size,
                 mtime_ns=st.st_mtime_ns,
-                rules=rules.RULES,
+                rules=version,
                 rows=n,
                 loaded_at=now,
             )
@@ -100,7 +112,7 @@ def sync_mbox(
             path,
             st.st_size,
             st.st_mtime_ns,
-            rules.RULES,
+            version,
             n,
             now,
         )

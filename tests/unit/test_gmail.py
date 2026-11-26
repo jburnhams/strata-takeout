@@ -118,3 +118,31 @@ def test_nul_bytes_are_dropped(tmp_path):
     p.write_text(msg(1, "a@b.c", "Sent", body="te\x00xt", subject="Delivered\x00\x00"))
     ((m, _),) = list(parse.messages(str(p), None))
     assert m["subject"] == "Delivered 1" and m["body_text"] == "text"
+
+
+def test_verdicts_promote_but_never_demote(db_session, mbox, tmp_path):
+    offsets = [m["offset"] for m, _ in parse.messages(str(mbox / "All mail.mbox"), None)]
+    v = tmp_path / "v.jsonl"
+    v.write_text(
+        "\n".join(
+            [
+                '{"offset": %d, "label": "transactional_keep", "confidence": 0.9, "source": "t"}'
+                % offsets[3],  # promotions -> keep
+                '{"offset": %d, "label": "marketing", "confidence": 0.99, "source": "t"}'
+                % offsets[2],  # personal stays kept
+            ]
+        )
+    )
+    assert ingest.sync_mbox(db_session, "main", str(mbox), None, verdicts=str(v)) == 6
+    db_session.flush()
+    promoted = db_session.scalar(select(Message).where(Message.offset == offsets[3]))
+    assert (promoted.tier, promoted.tier_reason, promoted.label, promoted.body_text) == (
+        "keep",
+        "classified",
+        "transactional_keep",
+        "hello there",
+    )
+    kept = db_session.scalar(select(Message).where(Message.offset == offsets[2]))
+    assert (kept.tier, kept.label) == ("keep", "marketing")
+    assert ingest.sync_mbox(db_session, "main", str(mbox), None, verdicts=str(v)) is None  # same file: skipped
+    assert ingest.sync_mbox(db_session, "main", str(mbox), None) == 6  # no verdicts: a different version, reloads

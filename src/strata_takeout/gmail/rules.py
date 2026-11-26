@@ -3,11 +3,11 @@
 keep:  you sent it (label `sent`), or it is personal mail: not bulk, not an unsubscribe-able list, not from a no-reply/system sender, not spam/trash,
        and Gmail's own category is `personal`. Uncategorised mail (old mail, or mail Gmail left alone) is NOT decided here: on a real archive it is
        mostly shop and notification mail, so it stays `other` (`uncategorised`) until a later step classifies it.
-other: everything else, which keeps its metadata."""
+other: everything else, which keeps its metadata, unless a classifier verdict (see `decide`) says it is worth keeping."""
 
 import re
 
-RULES = "r2"
+RULES = "r3"
 NOREPLY = re.compile(r"no-?reply|do-?not-?reply|donotreply|mailer-daemon|postmaster", re.I)
 CATEGORY = "category "
 
@@ -29,3 +29,14 @@ def tier(labels: list[str], from_addr: str, has_unsubscribe: bool, is_bulk: bool
     if cats - {CATEGORY + "personal"}:
         return "other", "gmail-category"
     return "keep", "personal"
+
+
+KEEP_LABELS = frozenset({"personal", "transactional_keep"})
+
+
+def decide(tier_: str, reason: str, verdict: dict | None) -> tuple[str, str]:
+    """The rules' tier, overridden upwards by a classifier verdict: what the rules keep stays kept (sent and personal mail are never dropped by a
+    model); an `other` message whose verdict label is in KEEP_LABELS is kept, reason `classified`."""
+    if tier_ == "other" and verdict and verdict.get("label") in KEEP_LABELS:
+        return "keep", "classified"
+    return tier_, reason

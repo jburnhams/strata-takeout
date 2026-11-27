@@ -2,6 +2,11 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-27
+
+**Facebook: an export tree into the shared database (`strata-takeout-facebook`)**
+Schema `facebook` (`accounts`, `sources`, `threads`, `members`, `messages`, `reactions`, `attachments`; `migrations_facebook/`, `[tool.omarchy-db.apps.facebook]`, install extra `[facebook]`, unit `systemd/takeout-facebook.service` started by `OnSuccess=` of the inbox and extract units). Chat lines, posts and comments are all `messages` with a `kind` and an `audience`; reactions and attachments (path relative to the tree, size, SHA-256) are their own tables; the latin-1-read-as-UTF-8 garbling of every string is undone. Idempotent by a fingerprint of the JSON files. See `docs/facebook.md`.
+
 ## 2026-11-26
 
 **Gmail: an attached message is an attachment, not part of the body**

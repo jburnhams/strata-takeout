@@ -965,6 +965,10 @@ version = "0.1.0"
 source = { editable = "." }
 
 [package.optional-dependencies]
+facebook = [
+    { name = "omarchy-db" },
+    { name = "strata-python" },
+]
 gmail = [
     { name = "omarchy-db" },
     { name = "strata-python" },
@@ -995,14 +999,16 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "omarchy-db", marker = "extra == 'facebook'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/database?subdirectory=python" },
+    { name = "strata-python", marker = "extra == 'facebook'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/strata-python" },
 ]
-provides-extras = ["youtube", "whatsapp", "gmail"]
+provides-extras = ["youtube", "whatsapp", "gmail", "facebook"]
 
 [package.metadata.requires-dev]
 dev = [

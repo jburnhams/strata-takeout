@@ -4,6 +4,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Instagram: an export tree into the shared database (`strata-takeout-instagram`)**
+Schema `instagram` (the Facebook tables plus `follows`; `migrations_instagram/`, `[tool.omarchy-db.apps.instagram]`, install extra `[instagram]`, unit `systemd/takeout-instagram.service` started by `OnSuccess=` of the inbox and extract units). Direct messages, own posts, archived posts and comments are `messages` with a `kind` and an `audience`; likes and message reactions, attachments (path, size, SHA-256) and followers/following are their own tables. The loader and parsing helpers are shared with `strata_takeout.facebook` (the loader now takes the models module and a reader). See `docs/instagram.md`.
+
 **Facebook: an export tree into the shared database (`strata-takeout-facebook`)**
 Schema `facebook` (`accounts`, `sources`, `threads`, `members`, `messages`, `reactions`, `attachments`; `migrations_facebook/`, `[tool.omarchy-db.apps.facebook]`, install extra `[facebook]`, unit `systemd/takeout-facebook.service` started by `OnSuccess=` of the inbox and extract units). Chat lines, posts and comments are all `messages` with a `kind` and an `audience`; reactions and attachments (path relative to the tree, size, SHA-256) are their own tables; the latin-1-read-as-UTF-8 garbling of every string is undone. Idempotent by a fingerprint of the JSON files. See `docs/facebook.md`.
 

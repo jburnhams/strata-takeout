@@ -132,9 +132,9 @@ def chat_attachments(m: dict) -> list[dict]:
     return out
 
 
-def threads(tree: str, ids: Ids) -> Iterator[tuple[dict, list[str], list[dict]]]:
+def threads(tree: str, ids: Ids, activity: str = ACTIVITY) -> Iterator[tuple[dict, list[str], list[dict]]]:
     """(thread, member names, messages) for every Messenger conversation folder, one thread at a time (the whole history is never held)."""
-    base = os.path.join(tree, ACTIVITY, "messages")
+    base = os.path.join(tree, activity, "messages")
     files = sorted(glob.glob(os.path.join(glob.escape(base), "*", "*", "message_*.json")))
     used: set[str] = set()
     for tdir, group in itertools.groupby(files, key=os.path.dirname):

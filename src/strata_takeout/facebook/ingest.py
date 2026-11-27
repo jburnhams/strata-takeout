@@ -1,4 +1,4 @@
-"""Load a Facebook export tree into the `facebook` schema, idempotently: the JSON files' fingerprint (count, total size, newest mtime) is kept in
+"""Load a Meta (Facebook, Instagram) export tree into its schema, idempotently: the JSON files' fingerprint (count, total size, newest mtime) is kept in
 `sources`; an unchanged tree is skipped, a changed or new one replaces every row of its (account, source) in one transaction, so a re-run never
 duplicates. Attachment files are looked up under the tree root by the path the JSON gives: size and SHA-256 are filled in when the file exists."""
 
@@ -6,19 +6,19 @@ import hashlib
 import mimetypes
 import os
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
-from . import parse
-from .models import Account, Attachment, Member, Message, Reaction, Source, Thread
+from . import models, parse
 
 SOURCE = "tree"
 BATCH = 2000
 
 
-def fingerprint(tree: str) -> tuple[int, int, int]:
-    files = parse.json_files(tree)
+def fingerprint(tree: str, reader: Any = parse) -> tuple[int, int, int]:
+    files = reader.json_files(tree)
     sts = [os.stat(f) for f in files]
     return len(files), sum(s.st_size for s in sts), max((s.st_mtime_ns for s in sts), default=0)
 
@@ -49,94 +49,115 @@ class Files:
         return r
 
 
-def _flush(session: Session, account: str, batch: list[dict], files: Files) -> None:
+def _flush(session: Session, m: Any, account: str, batch: list[dict], files: Files) -> None:
     rows = [
-        {k: v for k, v in m.items() if k not in ("reactions", "attachments")} | dict(account=account, source=SOURCE)
-        for m in batch
+        {k: v for k, v in x.items() if k not in ("reactions", "attachments")} | dict(account=account, source=SOURCE)
+        for x in batch
     ]
-    session.execute(insert(Message), rows)
-    if not any(m["reactions"] or m["attachments"] for m in batch):
+    session.execute(insert(m.Message), rows)
+    if not any(x["reactions"] or x["attachments"] for x in batch):
         return
     ids = {
         e: i
         for e, i in session.execute(
-            select(Message.ext_id, Message.id).where(
-                Message.account == account, Message.source == SOURCE, Message.ext_id.in_([m["ext_id"] for m in batch])
+            select(m.Message.ext_id, m.Message.id).where(
+                m.Message.account == account,
+                m.Message.source == SOURCE,
+                m.Message.ext_id.in_([x["ext_id"] for x in batch]),
             )
         )
     }
     reacts = [
-        dict(account=account, source=SOURCE, message_id=ids[m["ext_id"]], target_title=None, **r)
-        for m in batch
-        for r in m["reactions"]
+        dict(account=account, source=SOURCE, message_id=ids[x["ext_id"]], target_title=None, **r)
+        for x in batch
+        for r in x["reactions"]
     ]
     if reacts:
-        session.execute(insert(Reaction), reacts)
+        session.execute(insert(m.Reaction), reacts)
     atts = []
-    for m in batch:
-        for i, a in enumerate(m["attachments"]):
+    for x in batch:
+        for i, a in enumerate(x["attachments"]):
             size, mime, sha = files.info(a["path"])
-            atts.append(dict(message_id=ids[m["ext_id"]], seq=i, size=size, mime=mime, sha256=sha, **a))
+            atts.append(dict(message_id=ids[x["ext_id"]], seq=i, size=size, mime=mime, sha256=sha, **a))
     if atts:
-        session.execute(insert(Attachment), atts)
+        session.execute(insert(m.Attachment), atts)
 
 
-def load(session: Session, account: str, tree: str) -> int:
-    session.execute(delete(Reaction).where(Reaction.account == account, Reaction.source == SOURCE))
+def load(session: Session, account: str, tree: str, m: Any = models, reader: Any = parse) -> int:
+    """Replace the account's rows from the tree. `m` is the schema's models module, `reader` the platform's parser (threads, activity, likes, json_files)."""
+    session.execute(delete(m.Reaction).where(m.Reaction.account == account, m.Reaction.source == SOURCE))
     session.execute(
-        delete(Attachment).where(
-            Attachment.message_id.in_(select(Message.id).where(Message.account == account, Message.source == SOURCE))
+        delete(m.Attachment).where(
+            m.Attachment.message_id.in_(
+                select(m.Message.id).where(m.Message.account == account, m.Message.source == SOURCE)
+            )
         )
     )
-    for t in (Message, Member, Thread):
+    tables = [m.Message, m.Member, m.Thread] + ([m.Follow] if hasattr(m, "Follow") else [])
+    for t in tables:
         session.execute(delete(t).where(t.account == account, t.source == SOURCE))
     files, ids, batch, n = Files(tree), parse.Ids(), [], 0
 
-    def push(m: dict) -> None:
+    def push(x: dict) -> None:
         nonlocal batch, n
-        batch.append(m)
+        batch.append(x)
         n += 1
         if len(batch) >= BATCH:
-            _flush(session, account, batch, files)
+            _flush(session, m, account, batch, files)
             batch = []
 
-    for t, names, msgs in parse.threads(tree, ids):
-        session.execute(insert(Thread), [dict(account=account, source=SOURCE, **t)])
+    for t, names, msgs in reader.threads(tree, ids):
+        session.execute(insert(m.Thread), [dict(account=account, source=SOURCE, **t)])
         if names:
             session.execute(
-                insert(Member),
+                insert(m.Member),
                 [dict(account=account, source=SOURCE, thread_id=t["thread_id"], name=x) for x in sorted(set(names))],
             )
-        for m in msgs:
-            push(m)
-    for m in parse.activity(tree, ids):
-        push(m)
+        for x in msgs:
+            push(x)
+    for x in reader.activity(tree, ids):
+        push(x)
     if batch:
-        _flush(session, account, batch, files)
-    lk = [dict(account=account, source=SOURCE, message_id=None, **r) for r in parse.likes(tree)]
+        _flush(session, m, account, batch, files)
+    lk = [dict(account=account, source=SOURCE, message_id=None, **r) for r in reader.likes(tree)]
     for i in range(0, len(lk), BATCH):
-        session.execute(insert(Reaction), lk[i : i + BATCH])
-    return n + len(lk)
+        session.execute(insert(m.Reaction), lk[i : i + BATCH])
+    fol = [
+        dict(account=account, source=SOURCE, **r) for r in (reader.follows(tree) if hasattr(reader, "follows") else [])
+    ]
+    for i in range(0, len(fol), BATCH):
+        session.execute(insert(m.Follow), fol[i : i + BATCH])
+    return n + len(lk) + len(fol)
 
 
-def sync_tree(session: Session, account: str, tree: str, label: str | None = None, force: bool = False) -> int | None:
+def sync_tree(
+    session: Session,
+    account: str,
+    tree: str,
+    label: str | None = None,
+    force: bool = False,
+    m: Any = models,
+    reader: Any = parse,
+) -> int | None:
     """Rows loaded, or None when unchanged; 0 when `tree` holds none of the export. The caller commits."""
-    count, size, mtime = fingerprint(tree)
+    count, size, mtime = fingerprint(tree, reader)
     if count == 0:
         return 0
-    acc = session.get(Account, account)
+    acc = session.get(m.Account, account)
     if acc is None:
-        session.add(Account(id=account, label=label))
+        session.add(m.Account(id=account, label=label))
         session.flush()
     elif label:
         acc.label = label
-    row = session.get(Source, (account, SOURCE))
+    row = session.get(m.Source, (account, SOURCE))
     if not force and row and (row.path, row.size, row.mtime_ns) == (tree, size, mtime):
         return None
-    n = load(session, account, tree)
+    n = load(session, account, tree, m, reader)
     now = datetime.now(UTC)
     if row is None:
-        session.add(Source(account=account, source=SOURCE, path=tree, size=size, mtime_ns=mtime, rows=n, loaded_at=now))
+        session.add(
+            m.Source(account=account, source=SOURCE, path=tree, size=size, mtime_ns=mtime, rows=n, loaded_at=now)
+        )
     else:
         row.path, row.size, row.mtime_ns, row.rows, row.loaded_at = tree, size, mtime, n, now
     return n

@@ -4,6 +4,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Cross-platform view `unified.messages_all` (`strata-takeout-unified build`)**
+A plain Postgres view (`security_invoker`) over `whatsapp`, `facebook`, `instagram` and `googlechat`: platform, source, account, conversation id and name, sender, `at`, text, kind, `has_attachment` and `source_id` to join back to the platform's own row. Nothing is copied; the platform tables stay the full-fidelity source. It covers the platform schemas that exist when it is built, so `build` is rerun after a new platform is first loaded. New app `unified` (`migrations_unified/`, `engine = "postgres"`, install extra `[unified]`), `docs/unified.md`; tests on a throwaway Postgres with synthetic rows for every platform.
+
 **Gmail: keep a whole account (`--keep-all`, setting `gmail_keep_all`); gmvault zips and unzipped months read together**
 For a mailbox with no junk worth sorting out, every message keeps its body and attachments (reason `keep-all`; part of the load's version, so toggling reloads). A gmvault backup with both month zips and unzipped month folders reads both, a Gmail id found twice counting once (review finding).
 

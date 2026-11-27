@@ -163,3 +163,54 @@ def test_whatsapp_windows_split_on_gaps_and_embed(db_session):
     assert all(w.embedding is not None and w.embedded for w in again)
     assert windows.embed_pending(db_session, client=fc) == dict(windows=0)
     assert windows.counts(db_session) == dict(windows=2, embedded=2)
+
+
+@pytest.mark.db_app("whatsapp")
+def test_windows_follow_time_not_row_ids_and_keep_speaker_labels(db_session):
+    db_session.add(WAccount(id="main"))
+    t0 = datetime(2019, 4, 2, 18, 0, tzinfo=UTC)
+    # row ids out of time order, two unnamed speakers, a gap that makes two windows
+    rows = [
+        (2, "p1@s.whatsapp.net", t0, "first thing said in this long conversation about the holiday plans"),
+        (1, "p2@s.whatsapp.net", t0 + timedelta(minutes=1), "second thing said in reply about booking the ferry"),
+        (4, "p2@s.whatsapp.net", t0 + timedelta(hours=4), "much later p2 speaks again about the ferry crossing times"),
+        (
+            3,
+            "p3@s.whatsapp.net",
+            t0 + timedelta(hours=4, minutes=1),
+            "and p3 who has not spoken before joins in about the cabin",
+        ),
+    ]
+    for rid, who, at, text in rows:
+        db_session.add(
+            WMessage(
+                account="main",
+                source="android",
+                row_id=rid,
+                chat_jid="c@g.us",
+                sender_jid=who,
+                at=at,
+                kind="text",
+                text=text,
+            )
+        )
+    db_session.flush()
+    assert windows.rebuild(db_session, "main", "android") == 2
+    first, second = db_session.scalars(select(Window).order_by(Window.start_at)).all()
+    t1 = windows.window_text(db_session, first, {}, {})
+    assert (
+        t1.splitlines()[0].endswith("holiday plans")
+        and "Person 1:" in t1.splitlines()[0]
+        and "Person 2:" in t1.splitlines()[1]
+    )
+    t2 = windows.window_text(db_session, second, {}, {})
+    assert (
+        "Person 2: much later" in t2 and "Person 3: and p3" in t2
+    )  # the same people keep their labels in a later window
+
+
+@pytest.mark.db_app("whatsapp")
+def test_an_account_loaded_before_windows_existed_gets_them(db_session):
+    wa_setup(db_session)
+    assert windows.backfill(db_session, "main", "android") == 2
+    assert windows.backfill(db_session, "main", "android") == 0  # already there

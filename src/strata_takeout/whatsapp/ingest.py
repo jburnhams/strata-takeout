@@ -92,6 +92,9 @@ def sync_account(
         acct.label = label
     prev = session.get(Source, (account, SOURCE))
     if not force and prev and (prev.size, prev.mtime_ns, prev.path) == (size, mtime, key):
+        windows.backfill(
+            session, account, SOURCE
+        )  # an account loaded before windows existed gets them without a reload
         return None
     counts = load(session, account, SOURCE, db, wa_db, found)
     session.flush()

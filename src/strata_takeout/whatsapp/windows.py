@@ -114,13 +114,32 @@ def rebuild(session: Session, account: str, source: str) -> int:
     return n
 
 
+def backfill(session: Session, account: str, source: str) -> int:
+    """Build the windows of a source that has messages but none yet (loaded before windows existed); 0 when there are some or no messages."""
+    have = session.scalar(
+        select(func.count()).select_from(Window).where(Window.account == account, Window.source == source)
+    )
+    if have or not session.scalar(
+        select(func.count())
+        .select_from(Message)
+        .where(Message.account == account, Message.source == source, Message.kind == "text")
+    ):
+        return 0
+    return rebuild(session, account, source)
+
+
 def window_text(session: Session, w: Window, contacts: dict[str, str], cache: dict) -> str:
+    """The text of a window as `rebuild` saw it: the chat's messages in time order, labelled chat-wide (`Person N` is the same person in every window of
+    the chat), sliced from the window's first to its last message. `cache` holds one chat's lines at a time."""
     key = (w.account, w.source, w.chat_jid)
     if key not in cache:
-        cache.clear()  # one chat at a time
-        cache[key] = chat_rows(session, w.account, w.source, w.chat_jid)
-    rows = [m for m in cache[key] if w.first_row_id <= m.row_id <= w.last_row_id]
-    return "\n".join(lines(rows, contacts))
+        cache.clear()
+        rows = chat_rows(session, w.account, w.source, w.chat_jid)
+        cache[key] = ({m.row_id: i for i, m in enumerate(rows)}, lines(rows, contacts))
+    index, all_lines = cache[key]
+    if w.first_row_id not in index or w.last_row_id not in index:
+        return ""  # the messages changed since: rebuild() will replace the window
+    return "\n".join(all_lines[index[w.first_row_id] : index[w.last_row_id] + 1])
 
 
 def current_tag(client=None) -> str:

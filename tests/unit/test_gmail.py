@@ -159,3 +159,10 @@ def test_verdicts_promote_but_never_demote(db_session, mbox, tmp_path):
     assert (kept.tier, kept.label) == ("keep", "marketing")
     assert ingest.sync_mbox(db_session, "main", str(mbox), None, verdicts=str(v)) is None  # same file: skipped
     assert ingest.sync_mbox(db_session, "main", str(mbox), None) == 6  # no verdicts: a different version, reloads
+
+
+def test_a_verdict_keep_flag_beats_its_label():
+    assert rules.decide("other", "bulk", dict(label="marketing", keep=True)) == ("keep", "classified")
+    assert rules.decide("other", "bulk", dict(label="personal", keep=False)) == ("other", "bulk")
+    assert rules.decide("other", "bulk", dict(label="personal")) == ("keep", "classified")  # no flag: the label decides
+    assert rules.decide("keep", "sent", dict(label="marketing", keep=False)) == ("keep", "sent")  # never demotes

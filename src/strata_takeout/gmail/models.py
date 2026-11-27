@@ -13,7 +13,19 @@ Times are timestamptz (UTC). Portable types only (tests run on SQLite)."""
 from datetime import datetime
 
 from omarchy_db import make_base
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, false
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    false,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 Base = make_base()
@@ -68,6 +80,11 @@ class Message(Base):
     is_bulk: Mapped[bool] = mapped_column(Boolean, server_default=false(), default=False)
     tier: Mapped[str] = mapped_column(String(16), default="other")  # keep | other
     tier_reason: Mapped[str | None] = mapped_column(String(32), default=None)  # which rule said so
+    label: Mapped[str | None] = mapped_column(
+        String(32), default=None
+    )  # a classifier's verdict (personal, transactional_keep, notification, marketing), when a verdicts file gave one
+    label_confidence: Mapped[float | None] = mapped_column(Float, default=None)
+    label_source: Mapped[str | None] = mapped_column(String(64), default=None)  # which classifier/run said so
     body_text: Mapped[str | None] = mapped_column(Text, default=None)  # kept messages only
 
 

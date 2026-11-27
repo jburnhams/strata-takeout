@@ -2,6 +2,7 @@
 
 import hashlib
 import html
+import json
 import os
 import re
 from collections.abc import Iterator
@@ -126,7 +127,7 @@ def part_bytes(p: Message) -> bytes:
     return data if isinstance(data, bytes) else b""
 
 
-def message(offset: int, raw: bytes, folder: str | None) -> tuple[dict, list[dict]]:
+def message(offset: int, raw: bytes, folder: str | None, verdict: dict | None = None) -> tuple[dict, list[dict]]:
     """(message row, attachment rows) of one raw message. A kept message gets `body_text` and, when `folder` is given, its parts written there."""
     m = BytesParser(policy=policy.compat32).parsebytes(raw)
     name, addr = parseaddr(header(m.get("From")))
@@ -134,7 +135,7 @@ def message(offset: int, raw: bytes, folder: str | None) -> tuple[dict, list[dic
     ls = labels(m)
     unsub = m.get("List-Unsubscribe") is not None
     bulk = str(m.get("Precedence") or "").strip().lower() in ("bulk", "list", "junk")
-    tier, reason = rules.tier(ls, addr, unsub, bulk)
+    tier, reason = rules.decide(*rules.tier(ls, addr, unsub, bulk), verdict)
     row = dict(
         offset=offset,
         size=len(raw),
@@ -152,6 +153,9 @@ def message(offset: int, raw: bytes, folder: str | None) -> tuple[dict, list[dic
         is_bulk=bulk,
         tier=tier,
         tier_reason=reason,
+        label=verdict.get("label") if verdict else None,
+        label_confidence=verdict.get("confidence") if verdict else None,
+        label_source=verdict.get("source") if verdict else None,
         body_text=None,
     )
     text = atts = 0
@@ -183,7 +187,20 @@ def message(offset: int, raw: bytes, folder: str | None) -> tuple[dict, list[dic
     return row, out
 
 
-def messages(path: str, folder: str | None) -> Iterator[tuple[dict, list[dict]]]:
+def read_verdicts(path: str) -> dict[int, dict]:
+    """{mbox offset: {label, confidence, source}} from a JSON-lines file of classifier verdicts, one `{"offset":..,"label":..,"confidence":..,"source":..}` a line."""
+    out = {}
+    with open(path) as f:
+        for line in f:
+            if line.strip():
+                v = json.loads(line)
+                out[int(v["offset"])] = v
+    return out
+
+
+def messages(
+    path: str, folder: str | None, verdicts: dict[int, dict] | None = None
+) -> Iterator[tuple[dict, list[dict]]]:
     for batch in split(path):
         for off, raw in batch:
-            yield message(off, raw, folder)
+            yield message(off, raw, folder, (verdicts or {}).get(off))

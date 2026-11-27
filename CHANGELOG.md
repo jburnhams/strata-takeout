@@ -4,6 +4,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Gmail: undated messages take the mbox separator's date**
+Messages without a `Date` header (Gmail's old chat logs have none) used to load with `at` empty; `parse.when()` now falls back to the date on the mbox `From ` separator line (UTC when it has no zone). A header always wins. `rules.RULES` moved to `r5`, so the next `sync` reloads an unchanged mbox and backfills `at` (idempotent after that).
+
 **Search by meaning: embeddings of kept Gmail bodies and WhatsApp conversation windows (`embed`, `search`)**
 Both loaders can embed what they keep through a strata-models service (role `text-embed`, bge-m3, found by `STRATA_MODELS_URL`; extras `[gmail]` and `[whatsapp]` now include `strata-models-client`).
 - Gmail: `chunks` (pgvector, HNSW; offsets into the body), `messages.embedded`; `strata-takeout-gmail embed|search`, `sync|ingest --embed`; sync also takes the verdicts file from setting `gmail_verdicts`. Junk is never embedded.

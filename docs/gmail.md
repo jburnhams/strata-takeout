@@ -8,6 +8,8 @@
 - The load is idempotent: the mbox's size/mtime and the rule set's version (`rules.RULES`) are kept in `sources`; an unchanged file is skipped, a changed file or a new rule set replaces the (account, source) rows in one transaction. Changing the rules therefore re-tiers everything on the next `sync`.
 - The rules are the first, deterministic tier. A classifier for the undecided middle (marketing vs purchases from the same sender) hands its verdicts in as a JSON-lines file (`--verdicts FILE`, one `{"offset","label","confidence","source"}` per line, offset = the message's mbox offset). A verdict with `"keep": true` (or, without the flag, a label of `personal` or `transactional_keep`) promotes an `other` message to `keep` (reason `classified`); a verdict never demotes what the rules keep. The label, confidence and source are stored on the message. A new verdicts file reloads the mbox like a new rule version.
 
+- **Dates:** `at` is the `Date` header. A message without one (Gmail's old chat logs) takes the date of its mbox `From ` separator line instead; only a message with neither stays undated.
+
 Run: `OMARCHY_DB_LIVE=1 strata-takeout-gmail ingest ACCOUNT TREE --attachments DIR` (or `sync` with `STRATA_TAKEOUT_GMAIL_ACCOUNTS=id[:label]=tree`). Reading is streaming (the file is never held in memory); about 3 ms per message.
 
 ## Search by meaning (embeddings)

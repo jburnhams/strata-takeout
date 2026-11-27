@@ -103,6 +103,41 @@ def test_new_rules_reload_unchanged_mbox(db_session, mbox, monkeypatch):
     assert ingest.sync_mbox(db_session, "main", str(mbox), None) == 6
 
 
+def test_separator_date_fills_a_missing_date_header(db_session, tmp_path):
+    tree = tmp_path / "Mail"
+    tree.mkdir()
+    nodate = msg(7, "a@example.org", "Chat").replace("Date: Mon, 01 Jan 2018 10:00:00 +0000\n", "")
+    nodate = nodate.replace("From 7@xxx Mon Jan  1 00:00:00 2018", "From 7@xxx Fri Dec 09 17:36:24 +0000 2011")
+    classic = msg(8, "a@example.org", "Chat").replace("Date: Mon, 01 Jan 2018 10:00:00 +0000\n", "")
+    (tree / "All mail.mbox").write_text(nodate + classic + msg(9, "a@example.org", "Inbox"))
+    rows = [m for m, _ in parse.messages(str(tree / "All mail.mbox"), None)]
+    assert [m["at"].isoformat() for m in rows] == [
+        "2011-12-09T17:36:24+00:00",
+        "2018-01-01T00:00:00+00:00",  # asctime form: no zone, UTC
+        "2018-01-01T10:00:00+00:00",  # a Date header always wins over the separator
+    ]
+    assert parse.separator_when(b"not a separator\n") is None
+    assert parse.separator_when(b"From x@xxx garbage\n") is None
+
+
+def test_reload_backfills_undated_rows(db_session, tmp_path, monkeypatch):
+    tree = tmp_path / "Mail"
+    tree.mkdir()
+    (tree / "All mail.mbox").write_text(
+        msg(7, "a@example.org", "Chat").replace("Date: Mon, 01 Jan 2018 10:00:00 +0000\n", "")
+    )
+    monkeypatch.setattr(parse, "separator_when", lambda raw: None)  # as the loader that dropped them behaved
+    monkeypatch.setattr(rules, "RULES", "r-old")
+    ingest.sync_mbox(db_session, "main", str(tree), None)
+    db_session.flush()
+    assert db_session.scalar(select(Message.at)) is None
+    monkeypatch.undo()
+    assert ingest.sync_mbox(db_session, "main", str(tree), None) == 1  # the new rule version reloads the unchanged file
+    db_session.flush()
+    assert db_session.scalar(select(Message.at)).year == 2018
+    assert ingest.sync_mbox(db_session, "main", str(tree), None) is None  # and then it is idempotent
+
+
 def test_no_mbox_under_tree(db_session, tmp_path):
     assert ingest.sync_mbox(db_session, "main", str(tmp_path), None) == 0
 

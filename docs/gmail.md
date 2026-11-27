@@ -8,6 +8,8 @@
 - The load is idempotent: the mbox's size/mtime and the rule set's version (`rules.RULES`) are kept in `sources`; an unchanged file is skipped, a changed file or a new rule set replaces the (account, source) rows in one transaction. Changing the rules therefore re-tiers everything on the next `sync`.
 - The rules are the first, deterministic tier. A classifier for the undecided middle (marketing vs purchases from the same sender) hands its verdicts in as a JSON-lines file (`--verdicts FILE`, one `{"offset","label","confidence","source"}` per line, offset = the message's mbox offset). A verdict with `"keep": true` (or, without the flag, a label of `personal` or `transactional_keep`) promotes an `other` message to `keep` (reason `classified`); a verdict never demotes what the rules keep. The label, confidence and source are stored on the message. A new verdicts file reloads the mbox like a new rule version.
 
+- **Dates:** `at` is the `Date` header. A message without one (Gmail's old chat logs) takes the date of its mbox `From ` separator line instead; only a message with neither stays undated.
+
 Run: `OMARCHY_DB_LIVE=1 strata-takeout-gmail ingest ACCOUNT TREE --attachments DIR` (or `sync` with `STRATA_TAKEOUT_GMAIL_ACCOUNTS=id[:label]=tree`). Reading is streaming (the file is never held in memory); about 3 ms per message.
 
 ## Search by meaning (embeddings)
@@ -23,7 +25,5 @@ Run: `OMARCHY_DB_LIVE=1 strata-takeout-gmail ingest ACCOUNT TREE --attachments D
 - Source `gmvault`; a message's `offset` is its Gmail id (unique and stable), so a verdicts file keys on it like on an mbox offset. Rows of the same account may come from both an mbox and a gmvault backup.
 - **Labels** become the names the rules know: `\Inbox`/`\Sent`/`\Important`/`\Starred`/`\Draft`... lose the backslash, flag `\Seen` adds `opened` (else `unread`), `\Flagged` adds `starred`, any other label (a folder name) is kept lower-cased. This era has no Gmail categories, so the rules keep only sent mail; everything else is for a classifier.
 - **Dates:** the `Date` header, else the backup's `internal_date`. **Duplicates:** a second message with an already-loaded `Message-ID` is dropped.
-- **Zips and plain folders together:** the month zips and any unzipped month folders are all read (a Gmail id found twice counts once), so a half-unzipped backup loses nothing.
-- **Keep everything:** a mailbox with no junk worth sorting out (a work account) can be kept whole: `ingest --keep-all`, or setting `gmail_keep_all` (env `STRATA_TAKEOUT_GMAIL_KEEP_ALL`, comma-separated account ids) for `sync`. Every message of that account then keeps its body text and attachments (reason `keep-all`), and is embedded by `embed`; the choice is part of the load's version, so toggling it reloads. It is set by the job per account, never a default.
 - Chat logs stored by gmvault (label `gmvault-chats`) are skipped: they are not mail (the Google Chat loader reads them).
 - Idempotent like the mbox: the archives' sizes and mtimes and the rules version decide whether to reload.

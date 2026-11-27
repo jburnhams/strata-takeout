@@ -4,8 +4,11 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
-**Gmail: keep a whole account (`--keep-all`, setting `gmail_keep_all`); gmvault zips and unzipped months read together**
-For a mailbox with no junk worth sorting out, every message keeps its body and attachments (reason `keep-all`; part of the load's version, so toggling reloads). A gmvault backup with both month zips and unzipped month folders reads both, a Gmail id found twice counting once (review finding).
+**Google Chat / Hangouts: Takeout groups, old Gmail chat logs and gmvault backups into schema `googlechat` (`strata-takeout-googlechat`)**
+One schema for every Google chat export, each source kept whole: `conversations` (the group's `info` JSON), `members`, `messages` (typed sender/time/text plus the complete source message in `raw`) and `attachments` (original and export names, matched file with size and SHA-256, `status` present | missing | orphan, `match` exact | unquoted | sequence | shared). Takeout `Groups/*/messages.json` is read with its media matched back to messages (the export's duplicate `name(n).ext` and `?`-in-name quirks); chat-log mails labelled Chat in a Gmail mbox, and the same mails in a gmvault tree, become per-line messages from their XML time stamps (falling back to the mail date, then the mbox separator date). Unit `takeout-googlechat.service` is started by the extract and inbox units; `migrations_googlechat/`, install extra `[googlechat]`, `docs/googlechat.md`.
+
+**Gmail: undated messages take the mbox separator's date**
+Messages without a `Date` header (Gmail's old chat logs have none) used to load with `at` empty; `parse.when()` now falls back to the date on the mbox `From ` separator line (UTC when it has no zone). A header always wins. `rules.RULES` moved to `r5`, so the next `sync` reloads an unchanged mbox and backfills `at` (idempotent after that).
 
 **Gmail: a gmvault backup is a source for the loader**
 `ingest`/`sync` detect a gmvault backup (`db/YYYY-MM.zip` with `.eml`/`.meta` pairs, or unzipped) and load it as source `gmvault` (offset = Gmail id): IMAP labels and flags become the rules' label names, `internal_date` dates a message with no `Date`, a repeated `Message-ID` is dropped, `gmvault-chats` items are skipped. `gmail/gmvault.py`; tests with synthetic month zips. See `docs/gmail.md`.

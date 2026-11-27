@@ -10,9 +10,10 @@ Labels become the lower-case names the rules know: IMAP's `\\Inbox`, `\\Sent`, `
 `opened` (else `unread`) and `\\Flagged` adds `starred`; any other label (a folder name) is kept as written, lower-cased. This era has no Gmail categories, so the rules
 leave everything but sent mail to a classifier.
 
-Chat logs that gmvault stored with the mail (label `gmvault-chats`) are not mail and are skipped here; so are items whose `.eml` is missing."""
+Chat logs that gmvault stored with the mail (label `gmvault-chats`) are not mail and are skipped here (`chat_items` yields exactly those, for the Google chat loader); so are items whose `.eml` is missing."""
 
 import glob
+import gzip
 import json
 import os
 import zipfile
@@ -23,13 +24,12 @@ SKIP_LABELS = {"gmvault-chats"}
 
 
 def archives(root: str) -> list[str]:
-    """The month archives of a backup, oldest first: every `YYYY-MM.zip`, then (when there are any) the folder holding unzipped months. Both can be present
-    (a half-unzipped backup); `items` drops a message found twice."""
+    """The month zips of a backup, oldest first; a folder of unzipped months is returned as the folder itself."""
     base = os.path.join(root, "db") if os.path.isdir(os.path.join(root, "db")) else root
-    out = [z for z in sorted(glob.glob(os.path.join(glob.escape(base), "*.zip"))) if os.path.basename(z)[:4].isdigit()]
-    if glob.glob(os.path.join(glob.escape(base), "*", "*.meta")):
-        out.append(base)
-    return out
+    zips = sorted(glob.glob(os.path.join(glob.escape(base), "*.zip")))
+    if zips:
+        return [z for z in zips if os.path.basename(z)[:4].isdigit()]
+    return [base] if glob.glob(os.path.join(glob.escape(base), "*", "*.meta")) else []
 
 
 def detect(tree: str) -> bool:
@@ -77,8 +77,7 @@ def _pairs(archive: str) -> Iterator[tuple[dict, bytes]]:
 
 
 def items(root: str) -> Iterator[dict]:
-    """One dict per message, oldest archive first: raw, gm_id, labels, internal_date (UTC timestamp or None). A Gmail id found in two archives counts once."""
-    seen: set[int] = set()
+    """One dict per message, oldest archive first: raw, gm_id, labels, internal_date (UTC timestamp or None)."""
     for archive in archives(root):
         for meta, raw in _pairs(archive):
             if SKIP_LABELS & {str(x).lower() for x in meta.get("labels") or []}:
@@ -87,9 +86,6 @@ def items(root: str) -> Iterator[dict]:
                 gm_id = int(meta["gm_id"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if gm_id in seen:
-                continue
-            seen.add(gm_id)
             ts = meta.get("internal_date")
             yield dict(
                 raw=raw,
@@ -97,3 +93,60 @@ def items(root: str) -> Iterator[dict]:
                 labels=normalise(meta.get("labels"), meta.get("flags")),
                 internal_date=int(ts) if isinstance(ts, int | float) else None,
             )
+
+
+def _chat_pairs(root: str) -> Iterator[tuple[dict, bytes]]:
+    """(meta, raw .eml) of every item under `root`, whatever the layout: `chats*.zip` archives (`chats/subchats-N/<id>.eml|.eml.gz` + `.meta`) or the same unzipped, at any depth.
+    A zip stored with a method Python cannot read (PPMd) is skipped: a deflate copy of the same data works."""
+    for d, dirs, fs in os.walk(root):
+        dirs.sort()
+        for f in sorted(fs):
+            p = os.path.join(d, f)
+            if f.lower().startswith("chats") and f.lower().endswith(".zip"):
+                try:
+                    with zipfile.ZipFile(p) as z:
+                        names = set(z.namelist())
+                        for n in sorted(names):
+                            e = next((x for x in (n[:-5] + ".eml", n[:-5] + ".eml.gz") if x in names), None)
+                            if n.endswith(".meta") and e:
+                                data = z.read(e)
+                                yield json.loads(z.read(n)), gzip.decompress(data) if e.endswith(".gz") else data
+                except NotImplementedError:
+                    continue
+            elif f.endswith(".meta"):
+                e = next((x for x in (p[:-5] + ".eml", p[:-5] + ".eml.gz") if os.path.exists(x)), None)
+                if e:
+                    try:
+                        with open(p, encoding="utf-8") as fh, open(e, "rb") as g:
+                            data = g.read()
+                            yield json.load(fh), gzip.decompress(data) if e.endswith(".gz") else data
+                    except ValueError:
+                        continue
+
+
+def chat_items(root: str) -> Iterator[dict]:
+    """The chat logs of a backup (label `gmvault-chats`): raw, msg_id, gm_id, labels (lower-case, as stored), internal_date. Repeats are the caller's to drop (a backup holds the same chat twice)."""
+    for meta, raw in _chat_pairs(root):
+        labels = [str(x).lower() for x in meta.get("labels") or []]
+        if not SKIP_LABELS & set(labels):
+            continue
+        ts = meta.get("internal_date")
+        yield dict(
+            raw=raw,
+            msg_id=str(meta.get("msg_id") or "").strip("<>") or None,
+            gm_id=meta.get("gm_id"),
+            labels=labels,
+            internal_date=int(ts) if isinstance(ts, int | float) else None,
+        )
+
+
+def chat_files(root: str) -> list[str]:
+    """What a chat load reads (for its fingerprint): the `chats*.zip` files and loose `.meta` files."""
+    out = []
+    for d, _, fs in os.walk(root):
+        out += [
+            os.path.join(d, f)
+            for f in fs
+            if f.endswith(".meta") or (f.lower().startswith("chats") and f.lower().endswith(".zip"))
+        ]
+    return sorted(out)

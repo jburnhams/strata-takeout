@@ -74,16 +74,7 @@ def _run(
         Project.load(__file__, APP).upgrade(engine)
         for aid, label, tree in todo:
             with Session(engine) as s, s.begin():
-                n = sync_tree(
-                    s,
-                    aid,
-                    tree,
-                    os.path.expanduser(folder) if folder else None,
-                    label,
-                    force,
-                    verdicts,
-                    aid in keep_all,
-                )
+                n = sync_tree(s, aid, tree, os.path.expanduser(folder) if folder else None, label, force, verdicts)
             print(
                 f"{aid}: "
                 + (

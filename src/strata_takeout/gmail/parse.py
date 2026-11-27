@@ -60,12 +60,31 @@ def header(v: object) -> str:
         return clean(re.sub(r"\s+", " ", str(v or "")).strip())
 
 
-def when(m: Message) -> datetime | None:
-    try:
-        d = parsedate_to_datetime(str(m.get("Date")))
-    except Exception:
-        return None
+def utc(d: datetime) -> datetime:
     return d.astimezone(UTC) if d.tzinfo else d.replace(tzinfo=UTC)
+
+
+def separator_when(raw: bytes) -> datetime | None:
+    """The date on the mbox "From " separator line: `From <id> Fri Dec 09 17:36:24 +0000 2011` or the classic asctime form `From <id> Mon Jan  1 00:00:00 2018` (UTC then)."""
+    line = raw.split(b"\n", 1)[0].decode("latin-1").strip()
+    parts = line.split(None, 2)
+    if len(parts) < 3 or parts[0] != "From":
+        return None
+    text = parts[2]
+    for fmt in ("%a %b %d %H:%M:%S %z %Y", "%a %b %d %H:%M:%S %Y"):
+        try:
+            return utc(datetime.strptime(text, fmt))
+        except ValueError:
+            continue
+    return None
+
+
+def when(m: Message, raw: bytes = b"") -> datetime | None:
+    """The `Date` header; messages without one (Gmail's old chat logs have none) fall back to the separator line's date."""
+    try:
+        return utc(parsedate_to_datetime(str(m.get("Date"))))
+    except Exception:
+        return separator_when(raw)
 
 
 def labels(m: Message) -> list[str]:
@@ -134,10 +153,9 @@ def message(
     verdict: dict | None = None,
     source_labels: list[str] | None = None,
     fallback_at: datetime | None = None,
-    keep_all: bool = False,
 ) -> tuple[dict, list[dict]]:
     """(message row, attachment rows) of one raw message. A kept message gets `body_text` and, when `folder` is given, its parts written there.
-    `source_labels` stand in for the X-Gmail-Labels header (a gmvault backup keeps them beside the message) and `fallback_at` is the date of a message with none. `keep_all` keeps every message (body and attachments), reason `keep-all`: for an account whose mail has no junk worth sorting out."""
+    `source_labels` stand in for the X-Gmail-Labels header (a gmvault backup keeps them beside the message) and `fallback_at` is the date of a message with none."""
     m = BytesParser(policy=policy.compat32).parsebytes(raw)
     name, addr = parseaddr(header(m.get("From")))
     addr = addr.lower()
@@ -150,7 +168,7 @@ def message(
     row = dict(
         offset=offset,
         size=len(raw),
-        at=when(m) or fallback_at,
+        at=when(m, raw) or fallback_at,
         message_id=header(m.get("Message-ID")) or None,
         thread_id=str(m.get("X-GM-THRID") or "").strip() or None,
         in_reply_to=header(m.get("In-Reply-To")) or None,

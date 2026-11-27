@@ -118,3 +118,16 @@ def test_nul_bytes_are_dropped(tmp_path):
     p.write_text(msg(1, "a@b.c", "Sent", body="te\x00xt", subject="Delivered\x00\x00"))
     ((m, _),) = list(parse.messages(str(p), None))
     assert m["subject"] == "Delivered 1" and m["body_text"] == "text"
+
+
+def test_attached_message_is_an_attachment_not_body(tmp_path):
+    raw = (
+        b"From: <a@example.org>\nSubject: fwd\nX-Gmail-Labels: Sent\nMIME-Version: 1.0\n"
+        b"Content-Type: multipart/mixed; boundary=B\n\n"
+        b"--B\nContent-Type: text/plain\n\nouter text\n--B\nContent-Type: message/rfc822\n"
+        b'Content-Disposition: attachment; filename="forward.eml"\n\n'
+        b"From: <x@example.org>\nSubject: inner\n\ninner text\n--B--\n"
+    )
+    row, atts = parse.message(0, raw, str(tmp_path / "att"))
+    assert row["tier"] == "keep" and "inner text" not in (row["body_text"] or "")
+    assert [a["filename"] for a in atts] == ["forward.eml"] and atts[0]["size"] > 0

@@ -108,6 +108,24 @@ def store(data: bytes, folder: str, name: str | None) -> tuple[str, str]:
     return sha, rel
 
 
+def leaves(m: Message) -> Iterator[Message]:
+    """Every non-multipart part, except that an attached message (message/rfc822) is one leaf: its inner text is the
+    attachment's content, not the parent's body (`walk()` would enter it and merge the two)."""
+    if m.get_content_type() == "message/rfc822" or not m.is_multipart():
+        yield m
+        return
+    for sub in m.get_payload():  # type: ignore[union-attr]
+        yield from leaves(sub)  # type: ignore[arg-type]
+
+
+def part_bytes(p: Message) -> bytes:
+    if p.get_content_type() == "message/rfc822":
+        inner = p.get_payload()
+        return inner[0].as_bytes() if isinstance(inner, list) and inner else b""  # type: ignore[union-attr]
+    data = p.get_payload(decode=True)
+    return data if isinstance(data, bytes) else b""
+
+
 def message(offset: int, raw: bytes, folder: str | None) -> tuple[dict, list[dict]]:
     """(message row, attachment rows) of one raw message. A kept message gets `body_text` and, when `folder` is given, its parts written there."""
     m = BytesParser(policy=policy.compat32).parsebytes(raw)
@@ -139,9 +157,7 @@ def message(offset: int, raw: bytes, folder: str | None) -> tuple[dict, list[dic
     text = atts = 0
     bodies: dict[str, list[str]] = {"text/plain": [], "text/html": []}
     parts = []
-    for p in m.walk():
-        if p.is_multipart():
-            continue
+    for p in leaves(m):
         ct = p.get_content_type()
         disp = str(p.get("Content-Disposition") or "").lower()
         if ct in bodies and "attachment" not in disp:
@@ -149,8 +165,7 @@ def message(offset: int, raw: bytes, folder: str | None) -> tuple[dict, list[dic
             text += len(t)
             bodies[ct].append(t)
         else:
-            data = p.get_payload(decode=True)
-            data = data if isinstance(data, bytes) else b""
+            data = part_bytes(p)
             atts += len(data)
             parts.append((p, ct, data, "inline" in disp or bool(p.get("Content-ID"))))
     row.update(text_bytes=text, attach_bytes=atts, n_attachments=len(parts))

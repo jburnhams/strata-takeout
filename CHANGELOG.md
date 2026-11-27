@@ -4,6 +4,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-26
 
+**Gmail: an attached message is an attachment, not part of the body**
+A forwarded email attached as `.eml` (`message/rfc822`) used to be entered by the parser, merging its text into the outer body and recording no attachment. `gmail/parse.py` now treats it as one leaf and stores its bytes as the attachment.
+
 **Gmail: a Takeout mbox into the shared database (`strata-takeout-gmail`)**
 Schema `gmail` (`accounts`, `sources`, `messages`, `attachments`; `migrations_gmail/`, `[tool.omarchy-db.apps.gmail]`, install extra `[gmail]`). Every message is loaded as metadata; messages the rules pick (sent, and personal received) also keep their body text and attachments (written content-addressed under a folder the job passes). Idempotent: unchanged mbox and rule set are skipped, a changed one replaces its rows. See `docs/gmail.md`.
 

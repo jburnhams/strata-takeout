@@ -7,7 +7,7 @@ other: everything else, which keeps its metadata, unless a classifier verdict (s
 
 import re
 
-RULES = "r4"
+RULES = "r5"
 NOREPLY = re.compile(r"no-?reply|do-?not-?reply|donotreply|mailer-daemon|postmaster", re.I)
 CATEGORY = "category "
 

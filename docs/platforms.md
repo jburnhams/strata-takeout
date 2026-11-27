@@ -37,7 +37,7 @@ Today Google is a set of scripts (`scripts/google/`) plus the Python parts (`pat
 | Apple | B | privacy.apple.com, Get a copy of your data (parts up to ~25 GB) | todo |
 | Yahoo | B | Download your data; mail over IMAP | todo |
 | Reddit | B | data request (CSV), up to ~30 days | todo |
-| WhatsApp | C | per-chat export on the phone | todo |
+| WhatsApp | C | phone backup (decrypted Android `msgstore.db`, iOS encrypted backup); per-chat export is partial | Android db loader done, see [whatsapp.md](whatsapp.md) |
 
 The routes are from general knowledge and must be checked on each first real export. Account names and logins belong in a password manager, never in this repo.
 

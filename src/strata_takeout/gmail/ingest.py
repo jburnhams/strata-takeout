@@ -63,7 +63,7 @@ def load(session: Session, account: str, source: str, items) -> int:
     return n
 
 
-def gmvault_items(root: str, folder: str | None, verdicts: dict[int, dict] | None = None):
+def gmvault_items(root: str, folder: str | None, verdicts: dict[int, dict] | None = None, keep_all: bool = False):
     """(row, attachments) of every message of a gmvault backup, oldest first. A message whose Message-ID was already loaded is skipped (an import that
     left copies); the ones with none are all kept."""
     from datetime import UTC
@@ -79,6 +79,7 @@ def gmvault_items(root: str, folder: str | None, verdicts: dict[int, dict] | Non
             (verdicts or {}).get(it["gm_id"]),
             source_labels=it["labels"],
             fallback_at=at,
+            keep_all=keep_all,
         )
         mid = row.get("message_id")
         if mid:
@@ -97,10 +98,14 @@ def _ensure_account(session: Session, account: str, label: str | None) -> None:
         a.label = label
 
 
-def _version(verdicts: str | None) -> str:
+def _version(verdicts: str | None, keep_all: bool = False) -> str:
     vs = os.stat(verdicts) if verdicts else None
     # a new verdicts file reloads like new rules do (a short hash of its size and mtime keeps the column small)
-    return rules.RULES + (f"+{hashlib.sha1(f'{vs.st_size}.{vs.st_mtime_ns}'.encode()).hexdigest()[:12]}" if vs else "")
+    return (
+        rules.RULES
+        + (f"+{hashlib.sha1(f'{vs.st_size}.{vs.st_mtime_ns}'.encode()).hexdigest()[:12]}" if vs else "")
+        + ("+all" if keep_all else "")  # keeping everything is part of what a load was
+    )
 
 
 def _record(
@@ -133,17 +138,21 @@ def sync_gmvault(
     label: str | None = None,
     force: bool = False,
     verdicts: str | None = None,
+    keep_all: bool = False,
 ) -> int | None:
     """Rows loaded, or None when unchanged; 0 when `tree` holds no gmvault backup. The caller commits."""
     if not gmvault.detect(tree):
         return 0
     _ensure_account(session, account, label)
-    fp, version = gmvault.fingerprint(tree), _version(verdicts)
+    fp, version = gmvault.fingerprint(tree), _version(verdicts, keep_all)
     row = session.get(Source, (account, GMVAULT))
     if not force and row and (row.path, row.size, row.mtime_ns, row.rules) == (*fp, version):
         return None
     n = load(
-        session, account, GMVAULT, gmvault_items(tree, folder, parse.read_verdicts(verdicts) if verdicts else None)
+        session,
+        account,
+        GMVAULT,
+        gmvault_items(tree, folder, parse.read_verdicts(verdicts) if verdicts else None, keep_all),
     )
     _record(session, row, account, GMVAULT, fp, version, n)
     return n
@@ -157,11 +166,12 @@ def sync_tree(
     label: str | None = None,
     force: bool = False,
     verdicts: str | None = None,
+    keep_all: bool = False,
 ) -> int | None:
     """`sync_gmvault` for a gmvault backup, else `sync_mbox`."""
     if gmvault.detect(tree):
-        return sync_gmvault(session, account, tree, folder, label, force, verdicts)
-    return sync_mbox(session, account, tree, folder, label, force, verdicts)
+        return sync_gmvault(session, account, tree, folder, label, force, verdicts, keep_all)
+    return sync_mbox(session, account, tree, folder, label, force, verdicts, keep_all)
 
 
 def sync_mbox(
@@ -172,6 +182,7 @@ def sync_mbox(
     label: str | None = None,
     force: bool = False,
     verdicts: str | None = None,
+    keep_all: bool = False,
 ) -> int | None:
     """Rows loaded, or None when unchanged; 0 when `tree` holds no mbox. The caller commits."""
     path = find_mbox(tree)
@@ -179,12 +190,15 @@ def sync_mbox(
         return 0
     _ensure_account(session, account, label)
     st = os.stat(path)
-    fp, version = (path, st.st_size, st.st_mtime_ns), _version(verdicts)
+    fp, version = (path, st.st_size, st.st_mtime_ns), _version(verdicts, keep_all)
     row = session.get(Source, (account, SOURCE))
     if not force and row and (row.path, row.size, row.mtime_ns, row.rules) == (*fp, version):
         return None
     n = load(
-        session, account, SOURCE, parse.messages(path, folder, parse.read_verdicts(verdicts) if verdicts else None)
+        session,
+        account,
+        SOURCE,
+        parse.messages(path, folder, parse.read_verdicts(verdicts) if verdicts else None, keep_all),
     )
     _record(session, row, account, SOURCE, fp, version, n)
     return n

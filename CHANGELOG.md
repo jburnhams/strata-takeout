@@ -4,6 +4,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Gmail: keep a whole account (`--keep-all`, setting `gmail_keep_all`); gmvault zips and unzipped months read together**
+For a mailbox with no junk worth sorting out, every message keeps its body and attachments (reason `keep-all`; part of the load's version, so toggling reloads). A gmvault backup with both month zips and unzipped month folders reads both, a Gmail id found twice counting once (review finding).
+
 **Gmail: a gmvault backup is a source for the loader**
 `ingest`/`sync` detect a gmvault backup (`db/YYYY-MM.zip` with `.eml`/`.meta` pairs, or unzipped) and load it as source `gmvault` (offset = Gmail id): IMAP labels and flags become the rules' label names, `internal_date` dates a message with no `Date`, a repeated `Message-ID` is dropped, `gmvault-chats` items are skipped. `gmail/gmvault.py`; tests with synthetic month zips. See `docs/gmail.md`.
 

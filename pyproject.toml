@@ -12,12 +12,16 @@ dependencies = []                      # the core is standard library only; the 
 
 [project.optional-dependencies]
 youtube = ["omarchy-db", "strata-python"]      # strata-takeout-youtube: YouTube history into the shared database (sources below)
+whatsapp = ["omarchy-db", "strata-python"]     # strata-takeout-whatsapp: WhatsApp backups into the shared database
+gmail = ["omarchy-db", "strata-python"]        # strata-takeout-gmail: a Gmail mbox into the shared database
 
 [project.scripts]
 strata-takeout-safe-extract = "strata_takeout.safe_extract:main"
 strata-takeout-inbox = "strata_takeout.inbox:main"
 strata-takeout-nested = "strata_takeout.nested:main"
 strata-takeout-youtube = "strata_takeout.youtube.cli:main"
+strata-takeout-whatsapp = "strata_takeout.whatsapp.cli:main"
+strata-takeout-gmail = "strata_takeout.gmail.cli:main"
 
 [project.entry-points."filecat.profiles"]
 takeout = "strata_takeout.profile:Takeout"
@@ -142,7 +146,16 @@ unknown-argument = "ignore"
 redundant-condition = "ignore"
 
 # The YouTube history schema (src/strata_takeout/youtube/models.py, migrations/): `dbtool revision -m "..."` after a model change, `dbtool check` before a PR.
+# Further schemas are sub-tables, one per platform, each with its own migrations folder: `dbtool -p whatsapp revision|check ...`.
 [tool.omarchy-db]
 app = "youtube"
 models = "strata_takeout.youtube.models:Base"
 migrations = "migrations"
+
+[tool.omarchy-db.apps.whatsapp]
+models = "strata_takeout.whatsapp.models:Base"
+migrations = "migrations_whatsapp"
+
+[tool.omarchy-db.apps.gmail]
+models = "strata_takeout.gmail.models:Base"
+migrations = "migrations_gmail"

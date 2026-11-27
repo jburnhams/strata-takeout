@@ -13,10 +13,28 @@ pytestmark = pytest.mark.db_app("unified")
 PLATFORMS = ("whatsapp", "facebook", "instagram", "googlechat")
 
 
+def whatsapp_tables(eng):
+    """WhatsApp's tables the view reads, straight from its models: its migrations need pgvector (the `windows` table), which a plain test server lacks."""
+    from strata_takeout.whatsapp import models
+
+    with eng.begin() as c:
+        c.execute(text("CREATE SCHEMA IF NOT EXISTS whatsapp"))
+    wa = create_engine(eng.url, connect_args={"options": "-csearch_path=whatsapp"})
+    try:
+        models.Base.metadata.create_all(
+            wa, tables=[models.Base.metadata.tables[t] for t in ("accounts", "chats", "contacts", "messages")]
+        )
+    finally:
+        wa.dispose()
+
+
 def migrate(url, apps):
     eng = create_engine(url)
     for a in apps:
-        Project.load(view.__file__, a).upgrade(eng)
+        if a == "whatsapp":
+            whatsapp_tables(eng)
+        else:
+            Project.load(view.__file__, a).upgrade(eng)
     return eng
 
 

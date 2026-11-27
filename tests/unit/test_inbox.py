@@ -223,3 +223,15 @@ def test_google_family_platform_strips_takeout_like_main_tree(w, fake_filecat):
         w.exports / "google2" / "tree" / "YouTube and YouTube Music" / "subscriptions" / "subscriptions.csv"
     ).read_text() == "x"
     assert any("--strip 1" in str(c) for c in fake_filecat) and any("strip=1" in str(c) for c in fake_filecat)
+
+
+def test_names_with_spaces_reach_filecat_as_one_argument(w, fake_filecat):
+    """`run_cmd` splits a command string like a shell: an archive or platform name with a space must not become two arguments."""
+    import shlex
+
+    mkzip(w.inbox / "my data" / "All Data Categories.1.zip", {"a.txt": "1"})
+    assert w.run() == (1, 0)
+    (ingest,) = [c for c in fake_filecat if c.startswith("fc ingest-archive")]
+    args = shlex.split(ingest)
+    assert args[2] == "my-data"
+    assert args[3].endswith("All Data Categories.1.zip") and args[4] == "--root"

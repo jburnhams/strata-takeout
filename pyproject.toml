@@ -16,6 +16,7 @@ whatsapp = ["omarchy-db", "strata-python", "strata-models-client"]   # strata-ta
 gmail = ["omarchy-db", "strata-python", "strata-models-client"]   # strata-takeout-gmail: a Gmail mbox into the shared database, and embeddings of kept mail (strata-models service)
 facebook = ["omarchy-db", "strata-python"]     # strata-takeout-facebook: a Facebook export tree into the shared database
 instagram = ["omarchy-db", "strata-python"]    # strata-takeout-instagram: an Instagram export tree into the shared database
+unified = ["omarchy-db", "strata-python"]       # strata-takeout-unified: the cross-platform view unified.messages_all
 googlechat = ["omarchy-db", "strata-python"]   # strata-takeout-googlechat: Hangouts / Google Chat exports into the shared database
 
 [project.scripts]
@@ -28,6 +29,7 @@ strata-takeout-gmail = "strata_takeout.gmail.cli:main"
 strata-takeout-facebook = "strata_takeout.facebook.cli:main"
 strata-takeout-instagram = "strata_takeout.instagram.cli:main"
 strata-takeout-googlechat = "strata_takeout.googlechat.cli:main"
+strata-takeout-unified = "strata_takeout.unified.cli:main"
 
 [project.entry-points."filecat.profiles"]
 takeout = "strata_takeout.profile:Takeout"
@@ -179,3 +181,8 @@ migrations = "migrations_instagram"
 [tool.omarchy-db.apps.googlechat]
 models = "strata_takeout.googlechat.models:Base"
 migrations = "migrations_googlechat"
+
+[tool.omarchy-db.apps.unified]
+models = "strata_takeout.unified.models:Base"
+migrations = "migrations_unified"
+engine = "postgres"

@@ -987,6 +987,10 @@ instagram = [
     { name = "omarchy-db" },
     { name = "strata-python" },
 ]
+unified = [
+    { name = "omarchy-db" },
+    { name = "strata-python" },
+]
 whatsapp = [
     { name = "omarchy-db" },
     { name = "strata-models-client" },
@@ -1019,6 +1023,7 @@ requires-dist = [
     { name = "omarchy-db", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'googlechat'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'instagram'", git = "https://github.com/jburnhams/database?subdirectory=python" },
+    { name = "omarchy-db", marker = "extra == 'unified'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "strata-models-client", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/strata-models?subdirectory=client" },
@@ -1027,10 +1032,11 @@ requires-dist = [
     { name = "strata-python", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'googlechat'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'instagram'", git = "https://github.com/jburnhams/strata-python" },
+    { name = "strata-python", marker = "extra == 'unified'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/strata-python" },
 ]
-provides-extras = ["youtube", "whatsapp", "gmail", "facebook", "instagram", "googlechat"]
+provides-extras = ["youtube", "whatsapp", "gmail", "facebook", "instagram", "unified", "googlechat"]
 
 [package.metadata.requires-dev]
 dev = [

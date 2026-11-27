@@ -4,6 +4,13 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Search by meaning: embeddings of kept Gmail bodies and WhatsApp conversation windows (`embed`, `search`)**
+Both loaders can embed what they keep through a strata-models service (role `text-embed`, bge-m3, found by `STRATA_MODELS_URL`; extras `[gmail]` and `[whatsapp]` now include `strata-models-client`).
+- Gmail: `chunks` (pgvector, HNSW; offsets into the body), `messages.embedded`; `strata-takeout-gmail embed|search`, `sync|ingest --embed`; sync also takes the verdicts file from setting `gmail_verdicts`. Junk is never embedded.
+- WhatsApp: `windows` (30-minute-gap conversation windows with the same kind of vector, no phone numbers in the embedded text); rebuilt after each load, unchanged windows keep their vector; `embed|search`, `--embed`.
+- `src/strata_takeout/embedding.py` (chunking, the service call) and `vectors.py` (a small copy of `strata_python.db.vectors`: the repo is still on `omarchy-db`, whose test fixtures clash with the newer strata-python's database plugin).
+- Migrations `migrations_gmail/…chunks…`, `migrations_whatsapp/…windows…`; tests with a fake client, also run on Postgres (`pytest --pg`).
+
 **Instagram: an export tree into the shared database (`strata-takeout-instagram`)**
 Schema `instagram` (the Facebook tables plus `follows`; `migrations_instagram/`, `[tool.omarchy-db.apps.instagram]`, install extra `[instagram]`, unit `systemd/takeout-instagram.service` started by `OnSuccess=` of the inbox and extract units). Direct messages, own posts, archived posts and comments are `messages` with a `kind` and an `audience`; likes and message reactions, attachments (path, size, SHA-256) and followers/following are their own tables. The loader and parsing helpers are shared with `strata_takeout.facebook` (the loader now takes the models module and a reader). See `docs/instagram.md`.
 

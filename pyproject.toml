@@ -12,8 +12,8 @@ dependencies = []                      # the core is standard library only; the 
 
 [project.optional-dependencies]
 youtube = ["omarchy-db", "strata-python"]      # strata-takeout-youtube: YouTube history into the shared database (sources below)
-whatsapp = ["omarchy-db", "strata-python"]     # strata-takeout-whatsapp: WhatsApp backups into the shared database
-gmail = ["omarchy-db", "strata-python"]        # strata-takeout-gmail: a Gmail mbox into the shared database
+whatsapp = ["omarchy-db", "strata-python", "strata-models-client"]   # strata-takeout-whatsapp: WhatsApp backups into the shared database, and embeddings of conversation windows
+gmail = ["omarchy-db", "strata-python", "strata-models-client"]   # strata-takeout-gmail: a Gmail mbox into the shared database, and embeddings of kept mail (strata-models service)
 facebook = ["omarchy-db", "strata-python"]     # strata-takeout-facebook: a Facebook export tree into the shared database
 instagram = ["omarchy-db", "strata-python"]    # strata-takeout-instagram: an Instagram export tree into the shared database
 
@@ -44,6 +44,7 @@ dev = [
     "ty",
     "strata-python",     # its strata-check gate (scripts/check); also a dependency of the [youtube] extra
     "omarchy-db",        # the youtube schema's tests (models, migrations, fixtures)
+    "strata-models-client",  # the embedding step (a fake service stands in for it in tests)
 ]
 
 [tool.uv]
@@ -53,6 +54,7 @@ default-groups = ["dev"]
 # strata-python tracks main (no tag): uv.lock pins the commit, `uv lock --upgrade-package strata-python` moves it
 strata-python = { git = "https://github.com/jburnhams/strata-python" }
 omarchy-db = { git = "https://github.com/jburnhams/database", subdirectory = "python" }
+strata-models-client = { git = "https://github.com/jburnhams/strata-models", subdirectory = "client" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/strata_takeout"]

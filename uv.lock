@@ -948,6 +948,11 @@ wheels = [
 ]
 
 [[package]]
+name = "strata-models-client"
+version = "0.1.0"
+source = { git = "https://github.com/jburnhams/strata-models?subdirectory=client#ce3c2f3083b7e7facb85c450843aa0a82effd77c" }
+
+[[package]]
 name = "strata-python"
 version = "0.1.0"
 source = { git = "https://github.com/jburnhams/strata-python#6395d3c7692912200082e7397367ea948be513ca" }
@@ -971,6 +976,7 @@ facebook = [
 ]
 gmail = [
     { name = "omarchy-db" },
+    { name = "strata-models-client" },
     { name = "strata-python" },
 ]
 instagram = [
@@ -979,6 +985,7 @@ instagram = [
 ]
 whatsapp = [
     { name = "omarchy-db" },
+    { name = "strata-models-client" },
     { name = "strata-python" },
 ]
 youtube = [
@@ -997,6 +1004,7 @@ dev = [
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
     { name = "ruff" },
+    { name = "strata-models-client" },
     { name = "strata-python" },
     { name = "ty" },
 ]
@@ -1008,6 +1016,8 @@ requires-dist = [
     { name = "omarchy-db", marker = "extra == 'instagram'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/database?subdirectory=python" },
     { name = "omarchy-db", marker = "extra == 'youtube'", git = "https://github.com/jburnhams/database?subdirectory=python" },
+    { name = "strata-models-client", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/strata-models?subdirectory=client" },
+    { name = "strata-models-client", marker = "extra == 'whatsapp'", git = "https://github.com/jburnhams/strata-models?subdirectory=client" },
     { name = "strata-python", marker = "extra == 'facebook'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'gmail'", git = "https://github.com/jburnhams/strata-python" },
     { name = "strata-python", marker = "extra == 'instagram'", git = "https://github.com/jburnhams/strata-python" },
@@ -1027,6 +1037,7 @@ dev = [
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
     { name = "ruff" },
+    { name = "strata-models-client", git = "https://github.com/jburnhams/strata-models?subdirectory=client" },
     { name = "strata-python", git = "https://github.com/jburnhams/strata-python" },
     { name = "ty" },
 ]

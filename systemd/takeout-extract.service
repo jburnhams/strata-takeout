@@ -1,8 +1,8 @@
 [Unit]
 Description=Extract finished Google Takeout archives (oldest first), move them to done/
 OnFailure=notify-failure@%n.service
-# a finished extract may bring new YouTube history or a new Facebook or Instagram export
-OnSuccess=takeout-youtube.service takeout-facebook.service takeout-instagram.service
+# a finished extract may bring new YouTube history or a new Facebook, Instagram or Google chat export
+OnSuccess=takeout-youtube.service takeout-facebook.service takeout-instagram.service takeout-googlechat.service
 
 [Service]
 Type=oneshot

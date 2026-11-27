@@ -1,8 +1,8 @@
 [Unit]
 Description=Ingest export archives dropped into the takeouts inbox (extract, catalogue, file the zip)
 OnFailure=notify-failure@%n.service
-# a finished extract may bring new YouTube history
-OnSuccess=takeout-youtube.service
+# a finished extract may bring new YouTube history or a new Facebook export
+OnSuccess=takeout-youtube.service takeout-facebook.service
 
 [Service]
 Type=oneshot

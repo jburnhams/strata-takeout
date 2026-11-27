@@ -14,6 +14,7 @@ dependencies = []                      # the core is standard library only; the 
 youtube = ["omarchy-db", "strata-python"]      # strata-takeout-youtube: YouTube history into the shared database (sources below)
 whatsapp = ["omarchy-db", "strata-python"]     # strata-takeout-whatsapp: WhatsApp backups into the shared database
 gmail = ["omarchy-db", "strata-python"]        # strata-takeout-gmail: a Gmail mbox into the shared database
+facebook = ["omarchy-db", "strata-python"]     # strata-takeout-facebook: a Facebook export tree into the shared database
 
 [project.scripts]
 strata-takeout-safe-extract = "strata_takeout.safe_extract:main"
@@ -22,6 +23,7 @@ strata-takeout-nested = "strata_takeout.nested:main"
 strata-takeout-youtube = "strata_takeout.youtube.cli:main"
 strata-takeout-whatsapp = "strata_takeout.whatsapp.cli:main"
 strata-takeout-gmail = "strata_takeout.gmail.cli:main"
+strata-takeout-facebook = "strata_takeout.facebook.cli:main"
 
 [project.entry-points."filecat.profiles"]
 takeout = "strata_takeout.profile:Takeout"
@@ -159,3 +161,7 @@ migrations = "migrations_whatsapp"
 [tool.omarchy-db.apps.gmail]
 models = "strata_takeout.gmail.models:Base"
 migrations = "migrations_gmail"
+
+[tool.omarchy-db.apps.facebook]
+models = "strata_takeout.facebook.models:Base"
+migrations = "migrations_facebook"

@@ -16,3 +16,12 @@ Run: `OMARCHY_DB_LIVE=1 strata-takeout-gmail ingest ACCOUNT TREE --attachments D
 - Idempotent: `messages.embedded` holds `"<model>:<chunker>"`; only messages without it (new, reloaded, or embedded by another model or chunker version) are done. Junk (metadata-only) mail is never embedded.
 - Automatic after a load: `sync`/`ingest --embed` (or `STRATA_TAKEOUT_GMAIL_EMBED=1`). Skipped quietly when `strata-models-client` is missing or the service is down; the next run catches up.
 - `strata-takeout-gmail search "when did we book the flights"` prints the closest pieces. Install extra `[gmail]` brings the client.
+
+## gmvault backups (IMAP-era Gmail)
+`ingest`/`sync` also read a [gmvault](https://github.com/gaubert/gmvault) backup: a folder with `db/YYYY-MM.zip` (or the same months unzipped), each month holding `<gm_id>.eml` and `<gm_id>.meta` (JSON: `gm_id`, `msg_id`, `internal_date`, `labels`, `flags`, `subject`). The tree is detected by that layout.
+
+- Source `gmvault`; a message's `offset` is its Gmail id (unique and stable), so a verdicts file keys on it like on an mbox offset. Rows of the same account may come from both an mbox and a gmvault backup.
+- **Labels** become the names the rules know: `\Inbox`/`\Sent`/`\Important`/`\Starred`/`\Draft`... lose the backslash, flag `\Seen` adds `opened` (else `unread`), `\Flagged` adds `starred`, any other label (a folder name) is kept lower-cased. This era has no Gmail categories, so the rules keep only sent mail; everything else is for a classifier.
+- **Dates:** the `Date` header, else the backup's `internal_date`. **Duplicates:** a second message with an already-loaded `Message-ID` is dropped.
+- Chat logs stored by gmvault (label `gmvault-chats`) are skipped: they are not mail (the Google Chat loader reads them).
+- Idempotent like the mbox: the archives' sizes and mtimes and the rules version decide whether to reload.

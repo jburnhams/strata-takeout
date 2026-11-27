@@ -127,19 +127,27 @@ def part_bytes(p: Message) -> bytes:
     return data if isinstance(data, bytes) else b""
 
 
-def message(offset: int, raw: bytes, folder: str | None, verdict: dict | None = None) -> tuple[dict, list[dict]]:
-    """(message row, attachment rows) of one raw message. A kept message gets `body_text` and, when `folder` is given, its parts written there."""
+def message(
+    offset: int,
+    raw: bytes,
+    folder: str | None,
+    verdict: dict | None = None,
+    source_labels: list[str] | None = None,
+    fallback_at: datetime | None = None,
+) -> tuple[dict, list[dict]]:
+    """(message row, attachment rows) of one raw message. A kept message gets `body_text` and, when `folder` is given, its parts written there.
+    `source_labels` stand in for the X-Gmail-Labels header (a gmvault backup keeps them beside the message) and `fallback_at` is the date of a message with none."""
     m = BytesParser(policy=policy.compat32).parsebytes(raw)
     name, addr = parseaddr(header(m.get("From")))
     addr = addr.lower()
-    ls = labels(m)
+    ls = labels(m) if source_labels is None else source_labels
     unsub = m.get("List-Unsubscribe") is not None
     bulk = str(m.get("Precedence") or "").strip().lower() in ("bulk", "list", "junk")
     tier, reason = rules.decide(*rules.tier(ls, addr, unsub, bulk), verdict)
     row = dict(
         offset=offset,
         size=len(raw),
-        at=when(m),
+        at=when(m) or fallback_at,
         message_id=header(m.get("Message-ID")) or None,
         thread_id=str(m.get("X-GM-THRID") or "").strip() or None,
         in_reply_to=header(m.get("In-Reply-To")) or None,

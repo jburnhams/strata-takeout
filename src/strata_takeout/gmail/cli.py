@@ -1,7 +1,7 @@
 """strata-takeout-gmail: keep schema `gmail` of the shared database in step with a Gmail mbox from Google Takeout.
 
   sync [--force]                   every configured account; skips an mbox unchanged since the last load (and the same rules)
-  ingest ACCOUNT TREE [--label L]  one mbox (or a folder holding one)
+  ingest ACCOUNT TREE [--label L]  one mbox (or a folder holding one), or a gmvault backup folder (db/YYYY-MM.zip with .eml/.meta pairs)
   embed [--limit N]                embed the kept bodies that have no (current) vector (chunks table, pgvector); needs a strata-models service
   search QUERY [-k N]              the pieces of kept mail closest in meaning to QUERY
   doctor / set                     environment check / settings (strata-python)
@@ -60,7 +60,7 @@ def _run(
     from omarchy_db import Project, connect
     from sqlalchemy.orm import Session
 
-    from .ingest import sync_mbox
+    from .ingest import sync_tree
 
     lock = open(
         os.path.join(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir(), "strata-takeout-gmail.lock"), "a+"
@@ -70,8 +70,17 @@ def _run(
         Project.load(__file__, APP).upgrade(engine)
         for aid, label, tree in todo:
             with Session(engine) as s, s.begin():
-                n = sync_mbox(s, aid, tree, os.path.expanduser(folder) if folder else None, label, force, verdicts)
-            print(f"{aid}: " + ("unchanged" if n is None else f"no mbox under {tree}" if n == 0 else f"{n} messages"))
+                n = sync_tree(s, aid, tree, os.path.expanduser(folder) if folder else None, label, force, verdicts)
+            print(
+                f"{aid}: "
+                + (
+                    "unchanged"
+                    if n is None
+                    else f"no mbox or gmvault backup under {tree}"
+                    if n == 0
+                    else f"{n} messages"
+                )
+            )
             if embed:
                 _embed(engine, aid, None, quiet=True)
     return 0
@@ -147,7 +156,7 @@ def main(argv=None) -> int:
             a.embed or SETTINGS.get("gmail_embed") == "1",
         )
     )
-    i = sub.add_parser("ingest", help="load one mbox")
+    i = sub.add_parser("ingest", help="load one mbox or gmvault backup")
     i.add_argument("account")
     i.add_argument("tree")
     i.add_argument("--label")

@@ -1,0 +1,11 @@
+[Unit]
+Description=Load the Instagram export tree into the shared database (schema instagram); an unchanged tree is skipped
+OnFailure=notify-failure@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/strata-takeout-instagram sync
+# Real shared Postgres is opt-in (omarchy_db refuses it otherwise); never set it in a shell profile.
+Environment=OMARCHY_DB_LIVE=1
+# The accounts come from the job: Environment=STRATA_TAKEOUT_INSTAGRAM_ACCOUNTS=id[:label]=tree (a drop-in, not this file)
+Nice=10

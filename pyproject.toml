@@ -15,6 +15,7 @@ youtube = ["omarchy-db", "strata-python"]      # strata-takeout-youtube: YouTube
 whatsapp = ["omarchy-db", "strata-python"]     # strata-takeout-whatsapp: WhatsApp backups into the shared database
 gmail = ["omarchy-db", "strata-python"]        # strata-takeout-gmail: a Gmail mbox into the shared database
 facebook = ["omarchy-db", "strata-python"]     # strata-takeout-facebook: a Facebook export tree into the shared database
+instagram = ["omarchy-db", "strata-python"]    # strata-takeout-instagram: an Instagram export tree into the shared database
 
 [project.scripts]
 strata-takeout-safe-extract = "strata_takeout.safe_extract:main"
@@ -24,6 +25,7 @@ strata-takeout-youtube = "strata_takeout.youtube.cli:main"
 strata-takeout-whatsapp = "strata_takeout.whatsapp.cli:main"
 strata-takeout-gmail = "strata_takeout.gmail.cli:main"
 strata-takeout-facebook = "strata_takeout.facebook.cli:main"
+strata-takeout-instagram = "strata_takeout.instagram.cli:main"
 
 [project.entry-points."filecat.profiles"]
 takeout = "strata_takeout.profile:Takeout"
@@ -165,3 +167,7 @@ migrations = "migrations_gmail"
 [tool.omarchy-db.apps.facebook]
 models = "strata_takeout.facebook.models:Base"
 migrations = "migrations_facebook"
+
+[tool.omarchy-db.apps.instagram]
+models = "strata_takeout.instagram.models:Base"
+migrations = "migrations_instagram"

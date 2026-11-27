@@ -1,0 +1,1 @@
+"""Instagram export (the JSON "Download your information" tree) into the shared database: schema `instagram`. Same Meta layout as Facebook: parsing helpers and the loader are shared with `strata_takeout.facebook`."""

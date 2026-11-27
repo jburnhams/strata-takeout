@@ -1,7 +1,7 @@
 """strata-takeout-gmail: keep schema `gmail` of the shared database in step with a Gmail mbox from Google Takeout.
 
   sync [--force]                   every configured account; skips an mbox unchanged since the last load (and the same rules)
-  ingest ACCOUNT TREE [--label L]  one mbox (or a folder holding one), or a gmvault backup folder (db/YYYY-MM.zip with .eml/.meta pairs)
+  ingest ACCOUNT TREE [--label L]  one mbox (or a folder holding one), a gmvault backup folder (db/YYYY-MM.zip with .eml/.meta pairs) or an Outlook .pst file (needs libpst's readpst)
   embed [--limit N]                embed the kept bodies that have no (current) vector (chunks table, pgvector); needs a strata-models service
   search QUERY [-k N]              the pieces of kept mail closest in meaning to QUERY
   doctor / set                     environment check / settings (strata-python)
@@ -34,6 +34,8 @@ SETTINGS = Settings(
         Setting("gmail_verdicts", default=""),
         Setting("gmail_embed", default=""),
         Setting("gmail_keep_all", default=""),
+        Setting("gmail_readpst", default="readpst"),  # the libpst binary, for a `.pst` source
+        Setting("gmail_workdir", default=""),  # scratch folder for a `.pst` export (as big as the file or more)
     ],
 )  # no defaults: which accounts, where the mbox is and where attachments go is the job's business
 
@@ -60,6 +62,8 @@ def _run(
     verdicts: str | None = None,
     embed: bool = False,
     keep_all: frozenset[str] = frozenset(),
+    workdir: str | None = None,
+    readpst: str = "readpst",
 ) -> int:
     from omarchy_db import Project, connect
     from sqlalchemy.orm import Session
@@ -83,13 +87,15 @@ def _run(
                     force,
                     verdicts,
                     aid in keep_all,
+                    workdir,
+                    readpst,
                 )
             print(
                 f"{aid}: "
                 + (
                     "unchanged"
                     if n is None
-                    else f"no mbox or gmvault backup under {tree}"
+                    else f"no mbox, gmvault backup or .pst under {tree}"
                     if n == 0
                     else f"{n} messages"
                 )
@@ -168,6 +174,8 @@ def main(argv=None) -> int:
             SETTINGS.get("gmail_verdicts") or None,
             a.embed or SETTINGS.get("gmail_embed") == "1",
             frozenset(x.strip() for x in SETTINGS.get("gmail_keep_all").split(",") if x.strip()),
+            SETTINGS.get("gmail_workdir") or None,
+            SETTINGS.get("gmail_readpst") or "readpst",
         )
     )
     i = sub.add_parser("ingest", help="load one mbox or gmvault backup")
@@ -177,6 +185,10 @@ def main(argv=None) -> int:
     i.add_argument("--attachments")
     i.add_argument("--verdicts", help="JSON-lines classifier verdicts: {offset, label, confidence, source}")
     i.add_argument("--force", action="store_true")
+    i.add_argument(
+        "--workdir",
+        help="scratch folder for a .pst export (default: setting gmail_workdir, else the system temp folder)",
+    )
     i.add_argument("--embed", action="store_true", help="embed the kept bodies afterwards (or set gmail_embed=1)")
     i.add_argument(
         "--keep-all",
@@ -191,6 +203,8 @@ def main(argv=None) -> int:
             a.verdicts,
             a.embed or SETTINGS.get("gmail_embed") == "1",
             frozenset({a.account}) if a.keep_all else frozenset(),
+            a.workdir or SETTINGS.get("gmail_workdir") or None,
+            SETTINGS.get("gmail_readpst") or "readpst",
         )
     )
     e = sub.add_parser("embed", help="embed the kept bodies that have no (current) vector")

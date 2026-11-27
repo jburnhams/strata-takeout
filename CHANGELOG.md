@@ -4,6 +4,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 
 ## 2026-11-27
 
+**Gmail loader: Outlook `.pst` files as a source (`source = pst`)**
+`ingest`/`sync` take a `.pst` file: `readpst` exports it (also past folders other readers call damaged), every message becomes a row like an mbox message (labels = folder path plus the standard system label; undated messages fall back to their topmost `Received:` time), so the verdicts/classifier and embedding steps work unchanged. One account per file. New settings `gmail_readpst`, `gmail_workdir`, option `--workdir`. `gmail/pst.py`; tests with a fake `readpst`. See `docs/gmail.md`.
+
 **Cross-platform view `unified.messages_all` (`strata-takeout-unified build`)**
 A plain Postgres view (`security_invoker`) over `whatsapp`, `facebook`, `instagram` and `googlechat`: platform, source, account, conversation id and name, sender, `at`, text, kind, `has_attachment` and `source_id` to join back to the platform's own row. Nothing is copied; the platform tables stay the full-fidelity source. It covers the platform schemas that exist when it is built, so `build` is rerun after a new platform is first loaded. New app `unified` (`migrations_unified/`, `engine = "postgres"`, install extra `[unified]`), `docs/unified.md`; tests on a throwaway Postgres with synthetic rows for every platform.
 

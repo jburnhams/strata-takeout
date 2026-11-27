@@ -2,6 +2,11 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-27
+
+**Inbox: archive names with spaces reach filecat as one argument**
+`run_cmd` split command strings on whitespace, so `filecat ingest-archive` got `All Data Categories.1.zip` as four arguments, failed, and left the archive uncatalogued (extraction was unaffected). Strings are now split like a shell and the platform and path arguments are quoted.
+
 ## 2026-11-26
 
 **Gmail: an attached message is an attachment, not part of the body**

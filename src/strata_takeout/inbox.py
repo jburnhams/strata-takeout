@@ -19,6 +19,7 @@ Env (no path defaults: the job passes them): INBOX, EXPORTS_ROOT, DONE_ROOT, STA
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -77,7 +78,7 @@ def move(src, dst):
 
 
 def run_cmd(cmd, **kw):
-    return subprocess.run(cmd if isinstance(cmd, list) else cmd.split(), capture_output=True, text=True, **kw)
+    return subprocess.run(cmd if isinstance(cmd, list) else shlex.split(cmd), capture_output=True, text=True, **kw)
 
 
 def ensure_collection(filecat, platform, exports, done_dir):
@@ -87,7 +88,7 @@ def ensure_collection(filecat, platform, exports, done_dir):
     if r.returncode == 0 and re.search(rf"^{re.escape(platform)} \[", r.stdout, re.M):
         return True
     r = run_cmd(
-        f"{filecat} collection add {platform} --profile export --root tree={root}/tree --root loose={root}/loose,autoscan --set strip={strip_for(platform)} --set done_dir={done_dir}"
+        f"{filecat} collection add {shlex.quote(platform)} --profile export --root {shlex.quote(f'tree={root}/tree')} --root {shlex.quote(f'loose={root}/loose,autoscan')} --set strip={strip_for(platform)} --set {shlex.quote(f'done_dir={done_dir}')}"
     )
     return r.returncode == 0
 
@@ -113,7 +114,9 @@ def process_archive(path, platform, exports, done_root, filecat, notify, log):
     dest = unique(done_dir, os.path.basename(path))
     move(path, dest)
     if ensure_collection(filecat, platform, exports, done_dir):
-        r = run_cmd(f"{filecat} ingest-archive {platform} {dest} --root tree --strip {strip_for(platform)}")
+        r = run_cmd(
+            f"{filecat} ingest-archive {shlex.quote(platform)} {shlex.quote(dest)} --root tree --strip {strip_for(platform)}"
+        )
         if r.returncode != 0:
             log(
                 f"  catalogue: could not record ({(r.stderr or r.stdout).strip()[-100:]}); filecat run will retry from {done_dir}"

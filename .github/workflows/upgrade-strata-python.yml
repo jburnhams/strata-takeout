@@ -33,7 +33,7 @@ jobs:
         run: |
           uv run --no-sync strata-check
       - if: steps.changed.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: upgrade-strata-python
           title: Upgrade strata-python

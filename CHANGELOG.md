@@ -31,6 +31,14 @@ First WhatsApp source: the old-format `msgstore.db` (+ `wa.db`) of a decrypted A
 - `migrations_whatsapp/`, `[tool.omarchy-db.apps.whatsapp]`: the second schema of this repo, which needs the database library's multi-app support (needs [database PR 15](https://github.com/jburnhams/database/pull/15), merged).
 - Not loaded yet: chat exports (`_chat.txt`), the new-format `message` table, call log, quotes and receipts, the iOS backup.
 
+## 2026-11-15
+
+**Google Photos sidecars give filecat the people in each photo (branch `sidecar-labels`).** Pairs with strata-filecat's file labels (`filecat labels`): the `takeout` profile now says which files can carry labels and reads them.
+
+- `src/strata_takeout/sidecar.py`: **new**. `candidates(name)` lists the sidecar names Google may have used (cut at 46 characters before `.json`, `name(1).jpg` -> `name.jpg.supplemental-metadata(1).json`, `-edited` copies use the original's sidecar, older `<file>.json`); `find`, `people`.
+- `profile.py`: `Takeout.label_exts` (image extensions) and `Takeout.labels(rel)` -> `[("person", name)]` or None when there is no sidecar.
+- Tests: `tests/unit/test_sidecar.py` (synthetic files only), including a long-named duplicate whose truncated literal name would otherwise pick up the original's sidecar.
+
 ## 2026-11-10
 
 **Move to uv, ruff, pyright and the shared strata-python gate (branch `claude/project-thread-iw7199`)**

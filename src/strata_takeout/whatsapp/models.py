@@ -6,6 +6,7 @@
   chats          one per conversation: its JID, group subject, group or not, first/last message time and count.
   contacts       the address book the backup carried (wa.db): JID, number, display and WhatsApp names.
   participants   group membership as the backup recorded it.
+  windows        stretches of a conversation (30-minute gaps split them) with an embedding, for search by meaning (`strata-takeout-whatsapp embed|search`).
   messages       every message, whatever its kind: `kind` is text/image/video/audio/document/gif/sticker/location/
                  contact/call/system/deleted/other, `type_code` the raw WhatsApp code. `media_file` is the media
                  file's path relative to the account's media root when it was found there, so filecat's catalogue
@@ -19,6 +20,8 @@ from datetime import datetime
 from omarchy_db import make_base
 from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
+
+from strata_takeout.vectors import Vector, hnsw_index
 
 Base = make_base()
 
@@ -112,3 +115,30 @@ class Message(Base):
     latitude: Mapped[float | None] = mapped_column(Float, default=None)
     longitude: Mapped[float | None] = mapped_column(Float, default=None)
     starred: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Window(Base):
+    """A stretch of one conversation (text messages less than WINDOW_GAP_MIN apart, a bounded size) with its embedding, for search by meaning.
+    Only the span is kept (`first_row_id`..`last_row_id` of the chat's messages); the text is composed from the message rows when embedding. Rebuilt
+    after every load; a window whose text did not change keeps its vector (`text_sha`)."""
+
+    __tablename__ = "windows"
+    __table_args__ = (
+        Index("ix_wa_windows_chat", "account", "source", "chat_jid", "start_at"),
+        hnsw_index("ix_wa_windows_embedding_hnsw", "embedding"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    account: Mapped[str] = mapped_column(ForeignKey("accounts.id"))
+    source: Mapped[str] = mapped_column(String(32))
+    chat_jid: Mapped[str] = mapped_column(String(128))
+    first_row_id: Mapped[int] = mapped_column(BigInteger)
+    last_row_id: Mapped[int] = mapped_column(BigInteger)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    n_messages: Mapped[int] = mapped_column(Integer)
+    chars: Mapped[int] = mapped_column(Integer)
+    text_sha: Mapped[str] = mapped_column(
+        String(40)
+    )  # SHA-1 of the composed text: unchanged text keeps its vector across reloads
+    embedded: Mapped[str | None] = mapped_column(String(96), default=None)  # "<model>:<chunker>"; null = not yet
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), default=None)

@@ -5,6 +5,7 @@
   messages      EVERY message, as metadata: sender, recipients, subject, Gmail labels, sizes, flags (unsubscribe, bulk, reply) and the `tier` the
                 rules gave it. Only a `keep` message has `body_text` and attachment rows: junk keeps its metadata so nothing is lost and a later,
                 better classifier can promote it (re-run the load: the mbox offset says where the full message still is).
+  chunks        pieces of the kept bodies (offsets only) with their embedding, for search by meaning (`strata-takeout-gmail embed|search`).
   attachments   the non-text parts of kept messages: name, type, size, SHA-256 and where the bytes were written (relative to the job's attachment
                 folder, content-addressed, so a file attached twice is stored once).
 
@@ -27,6 +28,8 @@ from sqlalchemy import (
     false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
+
+from strata_takeout.vectors import Vector, hnsw_index
 
 Base = make_base()
 
@@ -86,6 +89,9 @@ class Message(Base):
     label_confidence: Mapped[float | None] = mapped_column(Float, default=None)
     label_source: Mapped[str | None] = mapped_column(String(64), default=None)  # which classifier/run said so
     body_text: Mapped[str | None] = mapped_column(Text, default=None)  # kept messages only
+    embedded: Mapped[str | None] = mapped_column(
+        String(96), default=None
+    )  # "<model>:<chunker>" the body was embedded with (chunks table); null = not yet
 
 
 class Attachment(Base):
@@ -104,3 +110,21 @@ class Attachment(Base):
     inline: Mapped[bool] = mapped_column(
         Boolean, server_default=false(), default=False
     )  # an embedded image/part, not a named attachment
+
+
+class Chunk(Base):
+    """A piece of a kept message's body with its embedding. Only offsets are kept (into `messages.body_text`), not the text twice."""
+
+    __tablename__ = "chunks"
+    __table_args__ = (
+        UniqueConstraint("message_id", "seq"),
+        hnsw_index("ix_chunks_embedding_hnsw", "embedding"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    message_id: Mapped[int] = mapped_column(ForeignKey("messages.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    start: Mapped[int] = mapped_column(Integer)  # character offsets of the piece in body_text
+    end: Mapped[int] = mapped_column(Integer)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(1024)
+    )  # bge-m3 (text-embed role); a model with another size needs a migration

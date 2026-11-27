@@ -9,3 +9,10 @@
 - The rules are the first, deterministic tier. A classifier for the undecided middle (marketing vs purchases from the same sender) hands its verdicts in as a JSON-lines file (`--verdicts FILE`, one `{"offset","label","confidence","source"}` per line, offset = the message's mbox offset). A verdict with `"keep": true` (or, without the flag, a label of `personal` or `transactional_keep`) promotes an `other` message to `keep` (reason `classified`); a verdict never demotes what the rules keep. The label, confidence and source are stored on the message. A new verdicts file reloads the mbox like a new rule version.
 
 Run: `OMARCHY_DB_LIVE=1 strata-takeout-gmail ingest ACCOUNT TREE --attachments DIR` (or `sync` with `STRATA_TAKEOUT_GMAIL_ACCOUNTS=id[:label]=tree`). Reading is streaming (the file is never held in memory); about 3 ms per message.
+
+## Search by meaning (embeddings)
+`strata-takeout-gmail embed` chunks the body of every kept message (paragraphs packed up to 1,400 characters, `embedding.chunk`), asks a strata-models service (role `text-embed`, found by `STRATA_MODELS_URL`; the model is the service's registry decision, bge-m3 at the time of writing, 1024 dimensions) for one vector per piece and stores it in `chunks` (pgvector, cosine HNSW index; offsets into `messages.body_text`, not the text twice). Each piece is embedded with a `From / Subject / Date` header so it knows who wrote it; quoted reply lines are dropped and links shortened first.
+
+- Idempotent: `messages.embedded` holds `"<model>:<chunker>"`; only messages without it (new, reloaded, or embedded by another model or chunker version) are done. Junk (metadata-only) mail is never embedded.
+- Automatic after a load: `sync`/`ingest --embed` (or `STRATA_TAKEOUT_GMAIL_EMBED=1`). Skipped quietly when `strata-models-client` is missing or the service is down; the next run catches up.
+- `strata-takeout-gmail search "when did we book the flights"` prints the closest pieces. Install extra `[gmail]` brings the client.

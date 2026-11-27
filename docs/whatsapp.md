@@ -29,3 +29,8 @@ strata-takeout-whatsapp sync                                               # eve
 - Old databases declare `media_wa_type` as TEXT; sizes can be junk (loaded as NULL); timestamps outside 2001-2100 load as NULL.
 - Media is matched by file name (two files with the same name in different folders resolve to the first found); when that finds nothing, by the backup's SHA-256 among files of the same size, which also finds renamed or moved files and files in subfolders.
 - Message text is personal data: nothing here logs it, and tests use synthetic databases only.
+
+## Search by meaning (embeddings)
+`windows` holds stretches of each conversation: text messages less than 30 minutes apart, kept under 1,600 characters (a longer run becomes several windows), at least 60 characters. A window is embedded as the conversation reads (`[2019-04-02 18:30] Name: text`, `Me` for the account's owner, the contact's name where the backup has one and `Person N`, numbered per chat, where it does not, so no phone number is embedded) with the same strata-models `text-embed` service as mail. Only the span (`first_row_id`..`last_row_id`) is stored, with a SHA-1 of the text: windows are rebuilt after every load and a window whose text did not change keeps its vector.
+
+`strata-takeout-whatsapp embed` fills in what has no (current) vector; `sync`/`ingest --embed` (or `STRATA_TAKEOUT_WHATSAPP_EMBED=1`) does it after a load, quietly skipped when the service is down. `search "the plumber and the boiler"` prints the closest windows.

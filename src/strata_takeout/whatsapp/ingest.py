@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from sqlalchemy import delete, insert
 from sqlalchemy.orm import Session
 
-from . import parse
+from . import parse, windows
 from .models import Account, Chat, Contact, Message, Participant, Source
 
 SOURCE = "android-msgstore"
@@ -94,6 +94,8 @@ def sync_account(
     if not force and prev and (prev.size, prev.mtime_ns, prev.path) == (size, mtime, key):
         return None
     counts = load(session, account, SOURCE, db, wa_db, found)
+    session.flush()
+    windows.rebuild(session, account, SOURCE)  # conversation windows for search by meaning (embedded by `embed`)
     now = datetime.now(UTC)
     if prev is None:
         session.add(

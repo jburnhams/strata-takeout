@@ -11,6 +11,8 @@ content-addressed under the attachment folder (setting `gmail_attachments`, env 
 one no file is written (metadata and body text only).
 Embedding runs after a load when `--embed` is given or setting `gmail_embed` (env STRATA_TAKEOUT_GMAIL_EMBED) is 1; it is skipped quietly when the
 service is not running, and the next run catches up. Setting `gmail_verdicts` names the classifier verdicts file `sync` loads with.
+Accounts whose mail has no junk worth sorting out (a work mailbox) can be kept whole: `--keep-all` on `ingest`, or setting `gmail_keep_all` (env STRATA_TAKEOUT_GMAIL_KEEP_ALL),
+a comma-separated list of account ids, for `sync`: every message of those accounts keeps its body and attachments (reason `keep-all`), whatever the rules say.
 Accounts are never defaulted: the job passes them, as setting `gmail_accounts` (env STRATA_TAKEOUT_GMAIL_ACCOUNTS), `id[:label]=tree[,...]`.
 The real database needs OMARCHY_DB_LIVE=1, also set by the job."""
 
@@ -31,6 +33,7 @@ SETTINGS = Settings(
         Setting("gmail_attachments", default=""),
         Setting("gmail_verdicts", default=""),
         Setting("gmail_embed", default=""),
+        Setting("gmail_keep_all", default=""),
     ],
 )  # no defaults: which accounts, where the mbox is and where attachments go is the job's business
 
@@ -56,6 +59,7 @@ def _run(
     force: bool,
     verdicts: str | None = None,
     embed: bool = False,
+    keep_all: frozenset[str] = frozenset(),
 ) -> int:
     from omarchy_db import Project, connect
     from sqlalchemy.orm import Session
@@ -70,7 +74,16 @@ def _run(
         Project.load(__file__, APP).upgrade(engine)
         for aid, label, tree in todo:
             with Session(engine) as s, s.begin():
-                n = sync_tree(s, aid, tree, os.path.expanduser(folder) if folder else None, label, force, verdicts)
+                n = sync_tree(
+                    s,
+                    aid,
+                    tree,
+                    os.path.expanduser(folder) if folder else None,
+                    label,
+                    force,
+                    verdicts,
+                    aid in keep_all,
+                )
             print(
                 f"{aid}: "
                 + (
@@ -154,6 +167,7 @@ def main(argv=None) -> int:
             a.force,
             SETTINGS.get("gmail_verdicts") or None,
             a.embed or SETTINGS.get("gmail_embed") == "1",
+            frozenset(x.strip() for x in SETTINGS.get("gmail_keep_all").split(",") if x.strip()),
         )
     )
     i = sub.add_parser("ingest", help="load one mbox or gmvault backup")
@@ -164,6 +178,11 @@ def main(argv=None) -> int:
     i.add_argument("--verdicts", help="JSON-lines classifier verdicts: {offset, label, confidence, source}")
     i.add_argument("--force", action="store_true")
     i.add_argument("--embed", action="store_true", help="embed the kept bodies afterwards (or set gmail_embed=1)")
+    i.add_argument(
+        "--keep-all",
+        action="store_true",
+        help="keep every message of this account (body and attachments), whatever the rules say",
+    )
     i.set_defaults(
         fn=lambda a: _run(
             [(a.account, a.label, a.tree)],
@@ -171,6 +190,7 @@ def main(argv=None) -> int:
             a.force,
             a.verdicts,
             a.embed or SETTINGS.get("gmail_embed") == "1",
+            frozenset({a.account}) if a.keep_all else frozenset(),
         )
     )
     e = sub.add_parser("embed", help="embed the kept bodies that have no (current) vector")

@@ -153,9 +153,10 @@ def message(
     verdict: dict | None = None,
     source_labels: list[str] | None = None,
     fallback_at: datetime | None = None,
+    keep_all: bool = False,
 ) -> tuple[dict, list[dict]]:
     """(message row, attachment rows) of one raw message. A kept message gets `body_text` and, when `folder` is given, its parts written there.
-    `source_labels` stand in for the X-Gmail-Labels header (a gmvault backup keeps them beside the message) and `fallback_at` is the date of a message with none."""
+    `source_labels` stand in for the X-Gmail-Labels header (a gmvault backup keeps them beside the message) and `fallback_at` is the date of a message with none. `keep_all` keeps every message (body and attachments), reason `keep-all`: for an account whose mail has no junk worth sorting out."""
     m = BytesParser(policy=policy.compat32).parsebytes(raw)
     name, addr = parseaddr(header(m.get("From")))
     addr = addr.lower()
@@ -163,6 +164,8 @@ def message(
     unsub = m.get("List-Unsubscribe") is not None
     bulk = str(m.get("Precedence") or "").strip().lower() in ("bulk", "list", "junk")
     tier, reason = rules.decide(*rules.tier(ls, addr, unsub, bulk), verdict)
+    if keep_all:
+        tier, reason = "keep", "keep-all"
     row = dict(
         offset=offset,
         size=len(raw),
@@ -226,8 +229,8 @@ def read_verdicts(path: str) -> dict[int, dict]:
 
 
 def messages(
-    path: str, folder: str | None, verdicts: dict[int, dict] | None = None
+    path: str, folder: str | None, verdicts: dict[int, dict] | None = None, keep_all: bool = False
 ) -> Iterator[tuple[dict, list[dict]]]:
     for batch in split(path):
         for off, raw in batch:
-            yield message(off, raw, folder, (verdicts or {}).get(off))
+            yield message(off, raw, folder, (verdicts or {}).get(off), keep_all=keep_all)

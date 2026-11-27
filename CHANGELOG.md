@@ -7,6 +7,9 @@ Newest first, grouped by day. One entry per change, in the same commit or PR as 
 **Inbox: archive names with spaces reach filecat as one argument**
 `run_cmd` split command strings on whitespace, so `filecat ingest-archive` got `All Data Categories.1.zip` as four arguments, failed, and left the archive uncatalogued (extraction was unaffected). Strings are now split like a shell and the platform and path arguments are quoted.
 
+**Gmail: a verdict can carry its own `keep` decision (rules r4)**
+`{"offset", "keep", "label", ...}`: when `keep` is present it decides whether an `other` message is promoted, else the label does as before. Rules never lose what they keep.
+
 ## 2026-11-26
 
 **Gmail: an attached message is an attachment, not part of the body**

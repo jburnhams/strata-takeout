@@ -240,6 +240,20 @@ def test_gmvault_tree(db_session, tmp_path):
     assert db_session.scalar(select(func.count()).select_from(Message)) == 2
 
 
+def test_gmvault_chat_zip(db_session, tmp_path):
+    import zipfile
+
+    raw = chat_mail(1, "a@example.org", "me@example.org", [("a@example.org", "hi", 1323451862533)], date=False).encode()
+    meta = json.dumps(dict(msg_id="<m1>", gm_id=1, labels=["gmvault-chats"], internal_date=1323451862))
+    with zipfile.ZipFile(tmp_path / "chats (2).zip", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("chats/subchats-1/1.eml", raw)
+        z.writestr("chats/subchats-1/1.meta", meta)
+        z.writestr("chats/subchats-2/2.eml.gz", gzip.compress(raw))
+        z.writestr("chats/subchats-2/2.meta", meta)  # the same chat stored twice: one message
+    (tmp_path / "2012-01.zip").write_bytes(b"not a chat archive")  # mail archives are the mail loader's
+    assert ingest.sync(db_session, "work", [str(tmp_path)]) == {"gmvault": 1}
+
+
 def test_nothing_to_load(db_session, tmp_path):
     assert ingest.sync(db_session, "main", [str(tmp_path)]) == {}
 

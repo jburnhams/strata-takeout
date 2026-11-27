@@ -6,7 +6,7 @@
 |---|---|---|
 | `takeout` | the Takeout `Google Chat/` folder (`Groups/<DM or Space id>/{group_info,messages}.json` + media) | Hangouts history (from ~2013) and Google Chat |
 | `gmail` | a Gmail mbox (`All mail….mbox`) | the old Gmail/GTalk chat logs: mails labelled Chat whose XML part holds a run of chat lines |
-| `gmvault` | a gmvault backup tree (`<id>.eml[.gz]` + `<id>.meta`) | the same chat-log mails from an older backup |
+| `gmvault` | a gmvault backup (`chats*.zip` or the unzipped `<id>.eml[.gz]` + `<id>.meta`), read with `gmail/gmvault.py` (the mail loader's reader) | the chat-log mails (label `gmvault-chats`) of an older backup; a backup holds each chat twice, one is kept |
 
 ## Tables
 - `conversations`: a Takeout group (`kind` dm | space, `ext_id` the group folder name, `info` the whole `group_info.json`) or, for the mail sources, a set of people (`kind` chat, `ext_id` a hash of the addresses: the same people always land in one conversation). First/last time and message count are kept.

@@ -11,6 +11,8 @@ from typing import Any
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.orm import Session
 
+from strata_takeout.gmail import gmvault as gmvault_items
+
 from . import parse
 from .models import Account, Attachment, Conversation, Member, Message, Source
 
@@ -42,13 +44,6 @@ def media_paths(root: str) -> Iterator[str]:
         if os.path.isdir(os.path.join(g, d)):
             for f in sorted(os.listdir(os.path.join(g, d))):
                 yield os.path.join(g, d, f)
-
-
-def gvault_files(tree: str) -> Iterator[str]:
-    for d, _, fs in os.walk(tree):
-        for f in fs:
-            if f.endswith(".meta"):
-                yield os.path.join(d, f)
 
 
 def wipe(session: Session, account: str, source: str) -> None:
@@ -242,7 +237,7 @@ def sync(
                 force,
             )
             continue
-        metas = list(gvault_files(p)) if os.path.isdir(p) else []
+        metas = gmvault_items.chat_files(p) if os.path.isdir(p) else []
         if metas:
             out["gmvault"] = sync_input(
                 session,

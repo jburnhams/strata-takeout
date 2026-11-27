@@ -10,6 +10,9 @@ One schema for every Google chat export, each source kept whole: `conversations`
 **Gmail: undated messages take the mbox separator's date**
 Messages without a `Date` header (Gmail's old chat logs have none) used to load with `at` empty; `parse.when()` now falls back to the date on the mbox `From ` separator line (UTC when it has no zone). A header always wins. `rules.RULES` moved to `r5`, so the next `sync` reloads an unchanged mbox and backfills `at` (idempotent after that).
 
+**Gmail: a gmvault backup is a source for the loader**
+`ingest`/`sync` detect a gmvault backup (`db/YYYY-MM.zip` with `.eml`/`.meta` pairs, or unzipped) and load it as source `gmvault` (offset = Gmail id): IMAP labels and flags become the rules' label names, `internal_date` dates a message with no `Date`, a repeated `Message-ID` is dropped, `gmvault-chats` items are skipped. `gmail/gmvault.py`; tests with synthetic month zips. See `docs/gmail.md`.
+
 **Search by meaning: embeddings of kept Gmail bodies and WhatsApp conversation windows (`embed`, `search`)**
 Both loaders can embed what they keep through a strata-models service (role `text-embed`, bge-m3, found by `STRATA_MODELS_URL`; extras `[gmail]` and `[whatsapp]` now include `strata-models-client`).
 - Gmail: `chunks` (pgvector, HNSW; offsets into the body), `messages.embedded`; `strata-takeout-gmail embed|search`, `sync|ingest --embed`; sync also takes the verdicts file from setting `gmail_verdicts`. Junk is never embedded.

@@ -7,7 +7,6 @@
 A conversation dict: ext_id, kind, name, info, members[{name,email,user_type}], messages[...], orphans[...] (media no message refers to).
 A message dict: ext_id, sender_*, at, at_precision, text, topic_id, raw, attachments[{original_name, export_name, path, status, match, seq}]."""
 
-import gzip
 import hashlib
 import json
 import os
@@ -20,6 +19,7 @@ from email.message import Message
 from email.parser import BytesParser
 from typing import Any
 
+from strata_takeout.gmail import gmvault as gmvault_items
 from strata_takeout.gmail import parse as gm
 
 GROUPS = "Groups"
@@ -339,32 +339,16 @@ def gmail_mbox(path: str) -> Iterator[dict]:
 
 
 def gmvault(tree: str) -> Iterator[dict]:
-    """Chat items of a gmvault backup tree: every `<id>.meta` whose labels say chat, with its `<id>.eml` or `.eml.gz`; one per Message-ID."""
+    """Chat items of a gmvault backup (`gmail.gmvault.chat_items`), one per Message-ID."""
     seen: set[str] = set()
-    for d, dirs, fs in os.walk(tree):
-        dirs.sort()
-        for f in sorted(fs):
-            if not f.endswith(".meta"):
-                continue
-            base = os.path.join(d, f[:-5])
-            try:
-                with open(base + ".meta", encoding="utf-8") as fh:
-                    meta = json.load(fh)
-            except (OSError, ValueError):
-                continue
-            ls = [str(x).lower() for x in meta.get("labels", [])]
-            if not is_chat(ls):
-                continue
-            eml = next((p for p in (base + ".eml", base + ".eml.gz") if os.path.isfile(p)), None)
-            if eml is None:
-                continue
-            raw = (gzip.open(eml) if eml.endswith(".gz") else open(eml, "rb")).read()
-            ts = meta.get("internal_date")
-            at = datetime.fromtimestamp(int(ts), UTC) if isinstance(ts, int | float) else None
-            key = str(meta.get("msg_id") or meta.get("gm_id") or f[:-5]).strip("<>")
-            if key in seen:
-                continue
-            seen.add(key)
-            c = mail_chat(raw, key=key, at=at, labels=ls)
-            if c:
-                yield c
+    for it in gmvault_items.chat_items(tree):
+        key = it["msg_id"] or str(it["gm_id"] or hashlib.sha1(it["raw"]).hexdigest())
+        if key in seen:
+            continue
+        seen.add(key)
+        ts = it["internal_date"]
+        c = mail_chat(
+            it["raw"], key=key, at=datetime.fromtimestamp(ts, UTC) if ts is not None else None, labels=it["labels"]
+        )
+        if c:
+            yield c

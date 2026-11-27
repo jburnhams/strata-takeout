@@ -240,3 +240,32 @@ def test_settings_parsing():
     assert cli.accounts("main:Label=/a/b,other=/c") == [("main", "Label", "/a/b"), ("other", None, "/c")]
     with pytest.raises(SystemExit):
         cli.accounts("")
+
+
+def test_unreadable_file_aborts_instead_of_dropping_rows(db_session, tree):
+    ingest.sync_tree(db_session, "main", str(tree))
+    db_session.flush()
+    (tree / "your_facebook_activity" / "comments_and_reactions" / "comments.json").write_text("{not json")
+    with (
+        pytest.raises(ValueError, match="comments.json"),
+        db_session.begin_nested(),
+    ):  # the CLI's transaction rolls back the same way
+        ingest.sync_tree(db_session, "main", str(tree))
+    assert (
+        db_session.scalar(select(func.count()).select_from(Message).where(Message.kind == "comment")) == 3
+    )  # the earlier rows are still there
+
+
+def test_threads_are_yielded_one_at_a_time_and_same_id_in_two_folders_is_kept(tree):
+    other = tree / "your_facebook_activity" / "messages" / "archived_threads" / "friends_123"
+    other.mkdir(parents=True)
+    (other / "message_1.json").write_text(
+        json.dumps(
+            {"participants": [], "title": "Old", "messages": [{"sender_name": "A", "timestamp_ms": 5, "content": "x"}]}
+        )
+    )
+    gen = parse.threads(str(tree), parse.Ids())
+    first = next(gen)
+    assert first[0]["folder"] == "archived_threads"  # a generator: the next conversation is not parsed yet
+    second = next(gen)
+    assert second[0]["thread_id"] == "inbox~friends_123" and second[0]["folder"] == "inbox"

@@ -6,6 +6,7 @@ alone when it is not that kind of text. Chat times are milliseconds, everything 
 
 import glob
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -42,11 +43,15 @@ def fix_tree(o: Any) -> Any:
 
 
 def load(path: str) -> Any:
+    """The file's JSON, or None when the file is not there (an export lacks some of them). A file that exists but cannot be read or parsed raises: a
+    load replaces the account's rows, so silently treating it as absent would delete what an earlier load had of it."""
     try:
         with open(path, encoding="utf-8") as f:
             return fix_tree(json.load(f))
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return None
+    except (OSError, ValueError) as e:
+        raise ValueError(f"cannot read {path}: {e}") from e
 
 
 def when(ts: Any, ms: bool = False) -> datetime | None:
@@ -128,21 +133,29 @@ def chat_attachments(m: dict) -> list[dict]:
 
 
 def threads(tree: str, ids: Ids) -> Iterator[tuple[dict, list[str], list[dict]]]:
-    """(thread, member names, messages) for every Messenger conversation folder."""
+    """(thread, member names, messages) for every Messenger conversation folder, one thread at a time (the whole history is never held)."""
     base = os.path.join(tree, ACTIVITY, "messages")
-    seen: dict[str, tuple[dict, list[str], list[dict]]] = {}
-    for p in sorted(glob.glob(os.path.join(glob.escape(base), "*", "*", "message_*.json"))):
-        d = load(p)
-        if not isinstance(d, dict) or not isinstance(d.get("messages"), list):
-            continue
-        folder, tid = os.path.basename(os.path.dirname(os.path.dirname(p))), os.path.basename(os.path.dirname(p))
-        names = [
-            x["name"] for x in d.get("participants") or [] if isinstance(x, dict) and isinstance(x.get("name"), str)
-        ]
-        t = seen.setdefault(
-            tid,
-            (
-                dict(
+    files = sorted(glob.glob(os.path.join(glob.escape(base), "*", "*", "message_*.json")))
+    used: set[str] = set()
+    for tdir, group in itertools.groupby(files, key=os.path.dirname):
+        folder, name = os.path.basename(os.path.dirname(tdir)), os.path.basename(tdir)
+        tid = (
+            name if name not in used else f"{folder}~{name}"
+        )  # the same conversation id in two folders stays two threads
+        thread: dict[str, Any] | None = None
+        names: list[str] = []
+        msgs: list[dict] = []
+        for p in group:
+            d = load(p)
+            if not isinstance(d, dict) or not isinstance(d.get("messages"), list):
+                continue
+            if thread is None:
+                names = [
+                    x["name"]
+                    for x in d.get("participants") or []
+                    if isinstance(x, dict) and isinstance(x.get("name"), str)
+                ]
+                thread = dict(
                     thread_id=tid,
                     folder=folder,
                     title=d.get("title") if isinstance(d.get("title"), str) else None,
@@ -150,37 +163,36 @@ def threads(tree: str, ids: Ids) -> Iterator[tuple[dict, list[str], list[dict]]]
                     still_member=d.get("is_still_participant")
                     if isinstance(d.get("is_still_participant"), bool)
                     else None,
-                ),
-                names,
-                [],
-            ),
-        )
-        for m in d["messages"]:
-            if not isinstance(m, dict) or not isinstance(m.get("timestamp_ms"), (int, float)):
-                continue
-            who = m.get("sender_name") if isinstance(m.get("sender_name"), str) else None
-            t[2].append(
-                dict(
-                    ext_id=ids.make("chat", tid, int(m["timestamp_ms"]), who),
-                    kind="chat",
-                    audience="thread",
-                    audience_name=t[0]["title"],
-                    thread_id=tid,
-                    at=when(m["timestamp_ms"], ms=True),
-                    author=who,
-                    body=m.get("content") if isinstance(m.get("content"), str) else None,
-                    title=None,
-                    call_seconds=m.get("call_duration") if isinstance(m.get("call_duration"), int) else None,
-                    unsent=bool(m.get("is_unsent")),
-                    reactions=[
-                        dict(reaction=r.get("reaction"), actor=r.get("actor"), at=None)
-                        for r in m.get("reactions") or []
-                        if isinstance(r, dict)
-                    ],
-                    attachments=chat_attachments(m),
                 )
-            )
-    yield from seen.values()
+            msgs += [m for m in (_chat(x, tid, thread["title"], ids) for x in d["messages"]) if m]
+        if thread is not None:
+            used.add(name)
+            yield thread, names, msgs
+
+
+def _chat(m: Any, tid: str, title: str | None, ids: Ids) -> dict | None:
+    if not isinstance(m, dict) or not isinstance(m.get("timestamp_ms"), (int, float)):
+        return None
+    who = m.get("sender_name") if isinstance(m.get("sender_name"), str) else None
+    return dict(
+        ext_id=ids.make("chat", tid, int(m["timestamp_ms"]), who),
+        kind="chat",
+        audience="thread",
+        audience_name=title,
+        thread_id=tid,
+        at=when(m["timestamp_ms"], ms=True),
+        author=who,
+        body=m.get("content") if isinstance(m.get("content"), str) else None,
+        title=None,
+        call_seconds=m.get("call_duration") if isinstance(m.get("call_duration"), int) else None,
+        unsent=bool(m.get("is_unsent")),
+        reactions=[
+            dict(reaction=r.get("reaction"), actor=r.get("actor"), at=None)
+            for r in m.get("reactions") or []
+            if isinstance(r, dict)
+        ],
+        attachments=chat_attachments(m),
+    )
 
 
 def _post_text(data: Any) -> str | None:

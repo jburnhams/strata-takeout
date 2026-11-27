@@ -2,6 +2,11 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-27
+
+**Gmail: a verdict can carry its own `keep` decision (rules r4)**
+`{"offset", "keep", "label", ...}`: when `keep` is present it decides whether an `other` message is promoted, else the label does as before. Rules never lose what they keep.
+
 ## 2026-11-26
 
 **Gmail: an attached message is an attachment, not part of the body**

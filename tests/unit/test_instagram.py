@@ -168,3 +168,27 @@ def test_settings_parsing():
     assert cli.accounts("main:Label=/a/b") == [("main", "Label", "/a/b")]
     with pytest.raises(SystemExit):
         cli.accounts("")
+
+
+def test_older_wrapped_likes_are_read(tmp_path):
+    put(
+        tmp_path / "your_instagram_activity" / "likes" / "liked_posts.json",
+        {
+            "likes_media_likes": [
+                {"title": "sam", "string_list_data": [{"href": "https://example.org/q", "timestamp": 1_300_000_000}]}
+            ]
+        },
+    )
+    put(
+        tmp_path / "your_instagram_activity" / "likes" / "liked_comments.json",
+        {
+            "likes_comment_likes": [
+                {"title": "pal", "string_list_data": [{"href": "https://example.org/c", "timestamp": 1_300_000_001}]}
+            ]
+        },
+    )
+    got = list(parse.likes(str(tmp_path)))
+    assert [(r["target_title"], r["at"].year) for r in got] == [
+        ("sam https://example.org/q", 2011),
+        ("pal https://example.org/c", 2011),
+    ]

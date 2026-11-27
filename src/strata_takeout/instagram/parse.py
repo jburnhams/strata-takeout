@@ -98,9 +98,22 @@ def _label(x: dict, name: str) -> Any:
 
 
 def likes(tree: str) -> Iterator[dict]:
-    """Posts the account liked: the owner and link of each (the likes of comments are in `liked_comments.json`, same shape)."""
-    for name in ("liked_posts.json", "liked_comments.json"):
-        for x in _list(load(os.path.join(tree, ACTIVITY, "likes", name)), "likes_comment_likes"):
+    """Posts and comments the account liked. Newer exports are a bare list of `label_values` records, older ones wrap `string_list_data` records
+    (`{title: owner, string_list_data: [{href, timestamp}]}`) in `likes_media_likes` / `likes_comment_likes`; both are read."""
+    for name, key in (("liked_posts.json", "likes_media_likes"), ("liked_comments.json", "likes_comment_likes")):
+        for x in _list(load(os.path.join(tree, ACTIVITY, "likes", name)), key):
+            if isinstance(x.get("string_list_data"), list):
+                title = x.get("title") if isinstance(x.get("title"), str) else None
+                for sd in x["string_list_data"]:
+                    if isinstance(sd, dict):
+                        href = sd.get("href") if isinstance(sd.get("href"), str) else None
+                        yield dict(
+                            reaction="like",
+                            actor=None,
+                            target_title=" ".join(v for v in (title, href) if v) or None,
+                            at=when(sd.get("timestamp")),
+                        )
+                continue
             owner, url = _label(x, "Title"), _label(x, "URL")
             yield dict(
                 reaction="like",

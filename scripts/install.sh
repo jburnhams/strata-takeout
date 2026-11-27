@@ -8,7 +8,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd); FC=${STRATA_FILECAT:-$HERE/../strata-filecat}
 VENV=${STRATA_VENV:-$HOME/.local/share/strata/venv}; BIN=${BIN:-$HOME/.local/bin}
 [ -d "$VENV" ] || uv venv -q "$VENV"
-args=(-e "$HERE[youtube,whatsapp,facebook,instagram]"); [ -d "$FC" ] && args+=(-e "$FC") || echo "note: $FC not found: filecat is not installed (strata-filecat is optional)" >&2
+args=(-e "$HERE[youtube,whatsapp,facebook,instagram,googlechat]"); [ -d "$FC" ] && args+=(-e "$FC") || echo "note: $FC not found: filecat is not installed (strata-filecat is optional)" >&2
 # filecat's database layer, omarchy-db, is in the public repo jburnhams/database (not on PyPI): from GitHub main, not
 # from a local clone whose branch other work may switch. Needed before filecat's code that imports it.
 [ -d "$FC" ] && args=("omarchy-db @ git+https://github.com/jburnhams/database@main#subdirectory=python" "${args[@]}")
@@ -21,5 +21,6 @@ link "$VENV/bin/strata-takeout-youtube" strata-takeout-youtube
 link "$VENV/bin/strata-takeout-whatsapp" strata-takeout-whatsapp
 link "$VENV/bin/strata-takeout-facebook" strata-takeout-facebook
 link "$VENV/bin/strata-takeout-instagram" strata-takeout-instagram
+link "$VENV/bin/strata-takeout-googlechat" strata-takeout-googlechat
 [ -x "$VENV/bin/filecat" ] && link "$VENV/bin/filecat" filecat
 for s in scripts/google/takeout-pull scripts/google/takeout-extract scripts/setup-exports-disk; do link "$HERE/$s" "$(basename "$s")"; done

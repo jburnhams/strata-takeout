@@ -153,9 +153,10 @@ def message(
     verdict: dict | None = None,
     source_labels: list[str] | None = None,
     fallback_at: datetime | None = None,
+    keep_all: bool = False,
 ) -> tuple[dict, list[dict]]:
     """(message row, attachment rows) of one raw message. A kept message gets `body_text` and, when `folder` is given, its parts written there.
-    `source_labels` stand in for the X-Gmail-Labels header (a gmvault backup keeps them beside the message) and `fallback_at` is the date of a message with none."""
+    `source_labels` stand in for the X-Gmail-Labels header (a gmvault backup keeps them beside the message) and `fallback_at` is the date of a message with none. `keep_all` keeps every message (body and attachments), reason `keep-all`: for an account whose mail has no junk worth sorting out."""
     m = BytesParser(policy=policy.compat32).parsebytes(raw)
     name, addr = parseaddr(header(m.get("From")))
     addr = addr.lower()

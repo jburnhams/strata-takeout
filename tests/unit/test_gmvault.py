@@ -126,3 +126,32 @@ def test_a_new_month_reloads_and_verdicts_key_on_the_gmail_id(db_session, backup
 def test_nothing_to_load_under_a_plain_folder(db_session, tmp_path):
     assert ingest.sync_tree(db_session, "work", str(tmp_path), None) == 0
     assert rules.tier(["inbox", "important", "opened"], "boss@example.org", False, False) == ("other", "uncategorised")
+
+
+def test_keep_all_keeps_every_message_and_toggling_reloads(db_session, backup):
+    assert ingest.sync_tree(db_session, "work", str(backup), None) == 4
+    db_session.flush()
+    assert (
+        db_session.scalar(select(func.count()).select_from(Message).where(Message.tier == "keep")) == 1
+    )  # only the sent one
+    assert ingest.sync_tree(db_session, "work", str(backup), None, keep_all=True) == 4  # a different load: reloads
+    db_session.flush()
+    db_session.expire_all()  # SQLite reuses the deleted rows' ids: do not read the session's stale copies
+    rows = list(db_session.scalars(select(Message).order_by(Message.offset)))
+    assert [(m.offset, m.tier, m.tier_reason, bool(m.body_text)) for m in rows] == [
+        (o, "keep", "keep-all", True) for o in (11, 12, 13, 23)
+    ]
+    assert ingest.sync_tree(db_session, "work", str(backup), None, keep_all=True) is None  # unchanged
+
+
+def test_zips_and_unzipped_months_are_read_together_without_repeats(backup):
+    plain = backup / "db" / "2012-05"
+    plain.mkdir()
+    (plain / "51.meta").write_bytes(meta(51, ["\\Inbox"]))
+    (plain / "51.eml").write_bytes(eml("a@example.org", "Unzipped", "in a plain folder", mid="f6"))
+    dup = backup / "db" / "2012-01"  # also unzipped: the same Gmail id as the zip's
+    dup.mkdir()
+    (dup / "11.meta").write_bytes(meta(11, ["\\Sent"]))
+    (dup / "11.eml").write_bytes(eml("me@example.org", "Plans", "see you at nine", mid="a1"))
+    assert [g["gm_id"] for g in gmvault.items(str(backup))] == [11, 12, 13, 21, 23, 51]
+    assert len(gmvault.archives(str(backup))) == 3  # two zips and the folder of plain months

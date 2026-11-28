@@ -2,6 +2,11 @@
 
 Newest first, grouped by day. One entry per change, in the same commit or PR as the change.
 
+## 2026-11-28
+
+**PST: header-only messages keep their sender, date and Message-ID (optional extra `[pst]`)**
+An Outlook IMAP-account cache holds only the headers of mail it never downloaded; `readpst` wrote those as bodiless `MAILER-DAEMON` shells with no date, which the loader marked as automated senders. With `libpff-python` installed (`pip install strata-takeout[pst]`) `gmail/pst.py` reads the headers from the named property they live in, drops the matching shell and loads the real header block (offsets above 5,000,000 within the folder's range). Without the extra nothing changes.
+
 ## 2026-11-27
 
 **Gmail loader: Outlook `.pst` files as a source (`source = pst`)**

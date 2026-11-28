@@ -18,6 +18,7 @@ facebook = ["omarchy-db", "strata-python"]     # strata-takeout-facebook: a Face
 instagram = ["omarchy-db", "strata-python"]    # strata-takeout-instagram: an Instagram export tree into the shared database
 unified = ["omarchy-db", "strata-python"]       # strata-takeout-unified: the cross-platform view unified.messages_all
 googlechat = ["omarchy-db", "strata-python"]   # strata-takeout-googlechat: Hangouts / Google Chat exports into the shared database
+pst = ["libpff-python>=20261030"]    # optional, for an Outlook .pst: recovers the headers of header-only messages (gmail/pst.py `stubs`)
 
 [project.scripts]
 strata-takeout-safe-extract = "strata_takeout.safe_extract:main"

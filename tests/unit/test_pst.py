@@ -129,3 +129,48 @@ def test_a_failed_export_loads_nothing_even_if_files_were_written(db_session, ps
     with pytest.raises(RuntimeError, match="readpst failed"):
         ingest.sync_tree(db_session, "old", str(pstfile), None, workdir=str(tmp_path), readpst=fake(rc=2))
     assert db_session.get(Source, ("old", "pst")) is None
+
+
+SHELL = b"From: <MAILER-DAEMON>\nSubject: Lost jacket\nTo: me@example.org\nMIME-Version: 1.0\nContent-Type: text/plain\n\n\n"
+HEADERS = b"Received: from a.example.org by b.example.org; Wed, 05 May 2004 10:00:00 +0000\r\nFrom: Ann <ann@example.org>\r\nSubject: Lost jacket\r\nTo: me@example.org\r\nMessage-ID: <j1@example.org>\r\n\r\n"
+
+
+def test_header_only_shells_are_replaced_by_the_headers_libpff_read(db_session, pstfile, fake, tmp_path, monkeypatch):
+    exe = fake(
+        {
+            "Inbox": {
+                "1.eml": eml("a@example.org", "real", "a body"),
+                "2.eml": SHELL,
+                "3.eml": SHELL.replace(b"jacket", b"keys"),
+            }
+        }
+    )
+    monkeypatch.setattr(
+        pst,
+        "stubs",
+        lambda p: {"Inbox": [("Lost jacket", HEADERS, 1083751200.0)], "Other": [("Only here", HEADERS, None)]},
+    )
+    got = list(pst.items(str(pstfile), str(tmp_path), exe))
+    by = {g["offset"]: g for g in got}
+    # the real message and the unmatched shell ("keys": libpff did not see it) stay; the matched shell is gone; both recovered items are added
+    assert sorted(by) == [
+        1 * pst.STEP + 1,
+        1 * pst.STEP + 3,
+        1 * pst.STEP + pst.STUB_BASE,
+        2 * pst.STEP + pst.STUB_BASE,
+    ]
+    assert b"ann@example.org" in by[1 * pst.STEP + pst.STUB_BASE]["raw"] and by[2 * pst.STEP + pst.STUB_BASE][
+        "labels"
+    ] == ["other"]
+    n = ingest.sync_tree(db_session, "uni", str(pstfile), None, keep_all=True, workdir=str(tmp_path), readpst=exe)
+    assert n == 4
+    db_session.flush()
+    row = db_session.scalar(select(Message).where(Message.offset == pst.STEP + pst.STUB_BASE))
+    assert (row.from_addr, row.subject, row.message_id) == ("ann@example.org", "Lost jacket", "<j1@example.org>")
+    assert row.at.replace(tzinfo=None) == datetime(2004, 5, 5, 10, 0)  # from the Received header
+
+
+def test_a_shell_is_recognised_by_its_shape():
+    assert pst.is_stub(SHELL) and not pst.is_stub(eml("a@example.org", "s", "b"))
+    assert not pst.is_stub(SHELL + b"x" * 2000)  # a real (long) message from a daemon is not a shell
+    assert pst._subject(SHELL) == "Lost jacket"

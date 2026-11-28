@@ -1,6 +1,6 @@
-"""Load Gmail into the `gmail` schema, from an mbox (Google Takeout) or a gmvault backup (an IMAP-era export, see gmvault.py), idempotently: the source's fingerprint (size, mtime) and
+"""Load mail into the `gmail` schema, from an mbox (Google Takeout), a gmvault backup (an IMAP-era export, see gmvault.py) or an Outlook `.pst` (see pst.py), idempotently: the source's fingerprint (size, mtime) and
 the rule set's version are kept in `sources`; an unchanged one is skipped, a changed or new one (or new rules) replaces every row of its (account, source) in one
-transaction, so a re-run never duplicates. `source` is `mbox` or `gmvault`; a message's `offset` is its byte offset in the mbox, or its Gmail id in a gmvault backup."""
+transaction, so a re-run never duplicates. `source` is `mbox`, `gmvault` or `pst`; a message's `offset` is its byte offset in the mbox, its Gmail id in a gmvault backup, or folder number and file number in a PST."""
 
 import hashlib
 import os
@@ -9,11 +9,12 @@ from datetime import UTC, datetime
 from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session
 
-from . import gmvault, parse, rules
+from . import gmvault, parse, pst, rules
 from .models import Account, Attachment, Message, Source
 
 SOURCE = "mbox"
 GMVAULT = "gmvault"
+PST = "pst"
 BATCH = 2000
 
 
@@ -87,6 +88,57 @@ def gmvault_items(root: str, folder: str | None, verdicts: dict[int, dict] | Non
                 continue
             seen.add(mid)
         yield row, atts
+
+
+def pst_items(
+    path: str,
+    folder: str | None,
+    verdicts: dict[int, dict] | None = None,
+    keep_all: bool = False,
+    workdir: str | None = None,
+    readpst: str = "readpst",
+):
+    """(row, attachments) of every message of an Outlook data file, in folder order (see pst.py for the offset and labels). A repeated Message-ID is NOT dropped:
+    the same message in two Outlook folders is two rows (each its folder's label), as in the file."""
+    for it in pst.items(path, workdir, readpst):
+        at = datetime.fromtimestamp(it["internal_date"], UTC) if it["internal_date"] is not None else None
+        yield parse.message(
+            it["offset"],
+            it["raw"],
+            folder,
+            (verdicts or {}).get(it["offset"]),
+            source_labels=it["labels"],
+            fallback_at=at,
+            keep_all=keep_all,
+        )
+
+
+def sync_pst(
+    session: Session,
+    account: str,
+    path: str,
+    folder: str | None,
+    label: str | None = None,
+    force: bool = False,
+    verdicts: str | None = None,
+    keep_all: bool = False,
+    workdir: str | None = None,
+    readpst: str = "readpst",
+) -> int | None:
+    """Rows loaded, or None when unchanged. The caller commits."""
+    _ensure_account(session, account, label)
+    fp, version = pst.fingerprint(path), _version(verdicts, keep_all)
+    row = session.get(Source, (account, PST))
+    if not force and row and (row.path, row.size, row.mtime_ns, row.rules) == (*fp, version):
+        return None
+    n = load(
+        session,
+        account,
+        PST,
+        pst_items(path, folder, parse.read_verdicts(verdicts) if verdicts else None, keep_all, workdir, readpst),
+    )
+    _record(session, row, account, PST, fp, version, n)
+    return n
 
 
 def _ensure_account(session: Session, account: str, label: str | None) -> None:
@@ -167,8 +219,12 @@ def sync_tree(
     force: bool = False,
     verdicts: str | None = None,
     keep_all: bool = False,
+    workdir: str | None = None,
+    readpst: str = "readpst",
 ) -> int | None:
-    """`sync_gmvault` for a gmvault backup, else `sync_mbox`."""
+    """`sync_pst` for an Outlook `.pst` file, `sync_gmvault` for a gmvault backup, else `sync_mbox`."""
+    if pst.detect(tree):
+        return sync_pst(session, account, tree, folder, label, force, verdicts, keep_all, workdir, readpst)
     if gmvault.detect(tree):
         return sync_gmvault(session, account, tree, folder, label, force, verdicts, keep_all)
     return sync_mbox(session, account, tree, folder, label, force, verdicts, keep_all)

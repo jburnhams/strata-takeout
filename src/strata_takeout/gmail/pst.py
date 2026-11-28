@@ -1,6 +1,6 @@
 """Read an Outlook data file (`.pst`) as input for the Gmail loader, through libpst's `readpst` (which also copes with damaged folders that other readers give up on).
 
-`readpst -r -e -8` writes one `.eml` per message under a folder tree that mirrors the PST's folders; contacts, calendar and notes come out as other file types and are
+`readpst -r -e -8 -D` writes one `.eml` per message under a folder tree that mirrors the PST's folders (inside one directory named for the store, which is dropped); contacts, calendar and notes come out as other file types and are
 ignored here. The export goes to a scratch folder (`workdir`, else the system temp folder; a PST can expand to more than its own size, so the job points it at a disk with room) that
 is removed afterwards.
 
@@ -81,20 +81,28 @@ def export(path: str, out: str, readpst: str = "readpst") -> None:
         raise SystemExit(
             f"{readpst} not found: install libpst (the job may name the binary with STRATA_TAKEOUT_GMAIL_READPST)"
         )
-    r = subprocess.run([readpst, "-q", "-r", "-e", "-8", "-o", out, path], capture_output=True, text=True)
-    if r.returncode != 0 and not any(f.endswith(".eml") for _, _, fs in os.walk(out) for f in fs):
+    # -D: Deleted Items too (readpst skips them by default; they get the `trash` label). A nonzero exit is a failed export even when some files were written
+    # (a full scratch disk, a killed process): loading the prefix would replace a complete load and the unchanged fingerprint would hide it. Items readpst skips on its own are not an error (exit 0).
+    r = subprocess.run([readpst, "-q", "-r", "-e", "-8", "-D", "-o", out, path], capture_output=True, text=True)
+    if r.returncode != 0:
         raise RuntimeError(f"readpst failed ({r.returncode}): {r.stderr.strip()[:300]}")
 
 
-def _folders(root: str) -> dict[str, list[str]]:
-    """{folder path relative to root: sorted .eml names}, only folders that hold messages."""
+def _folders(root: str) -> tuple[str, dict[str, list[str]]]:
+    """(the store's folder, {folder path relative to it: sorted .eml names}), only folders that hold messages. readpst puts everything under one directory named for the store;
+    it is dropped (a lone top-level directory with no messages of its own) so `Sent Items` is a top-level folder and gets its system label."""
+    top = os.listdir(root)
+    if len(top) == 1 and os.path.isdir(os.path.join(root, top[0])):
+        inner = os.path.join(root, top[0])
+        if not any(f.endswith(".eml") for f in os.listdir(inner)):
+            root = inner
     out: dict[str, list[str]] = {}
     for d, dirs, fs in os.walk(root):
         dirs.sort()
         mails = sorted((f for f in fs if f.endswith(".eml")), key=lambda f: int(f[:-4]) if f[:-4].isdigit() else -1)
         if mails:
             out[os.path.relpath(d, root).replace(os.sep, "/")] = mails
-    return out
+    return root, out
 
 
 def items(path: str, workdir: str | None = None, readpst: str = "readpst") -> Iterator[dict]:
@@ -102,12 +110,12 @@ def items(path: str, workdir: str | None = None, readpst: str = "readpst") -> It
     tmp = tempfile.mkdtemp(prefix="strata-pst-", dir=workdir or None)
     try:
         export(path, tmp, readpst)
-        folders = _folders(tmp)
+        store, folders = _folders(tmp)
         for n, folder in enumerate(sorted(folders), 1):
             lab = labels(folder)
             for f in folders[folder]:
                 seq = int(f[:-4]) if f[:-4].isdigit() else 0
-                with open(os.path.join(tmp, folder, f), "rb") as fh:
+                with open(os.path.join(store, folder, f), "rb") as fh:
                     raw = fh.read()
                 d = received_when(raw)
                 yield dict(raw=raw, offset=n * STEP + seq, labels=lab, internal_date=d.timestamp() if d else None)

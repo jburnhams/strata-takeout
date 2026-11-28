@@ -15,12 +15,16 @@ pytestmark = pytest.mark.db_app("gmail")
 FAKE = """#!{py}
 import os, sys
 out = sys.argv[sys.argv.index("-o") + 1]
-tree = {tree!r}
+if "-D" not in sys.argv:  # without -D the real tool leaves Deleted Items out
+    tree = {{k: v for k, v in {tree!r}.items() if not k.startswith("Deleted")}}
+else:
+    tree = {tree!r}
 for path, files in tree.items():
-    d = os.path.join(out, path)
+    d = os.path.join(out, "Store", path)  # the real tool nests everything under a directory named for the store
     os.makedirs(d, exist_ok=True)
     for name, data in files.items():
         open(os.path.join(d, name), "wb").write(data)
+sys.exit({rc})
 """
 
 
@@ -35,15 +39,16 @@ TREE = {
     "Inbox/Family ": {"1.eml": eml("c@example.org", "fam", "hello family")},
     "Sent Items": {"1.eml": eml("me@example.org", "out", "sent text")},
     "Junk E-mail": {"1.eml": eml("x@example.org", "junk", "buy now")},
+    "Deleted Items": {"1.eml": eml("d@example.org", "gone", "deleted text")},
     "Contacts": {"1.vcf": b"BEGIN:VCARD\nEND:VCARD\n"},  # not mail: ignored
 }
 
 
 @pytest.fixture
 def fake(tmp_path):
-    def make(tree=TREE):
+    def make(tree=TREE, rc=0):
         exe = tmp_path / "readpst"
-        exe.write_text(FAKE.format(py=sys.executable, tree=tree))
+        exe.write_text(FAKE.format(py=sys.executable, tree=tree, rc=rc))
         exe.chmod(exe.stat().st_mode | stat.S_IEXEC)
         return str(exe)
 
@@ -76,11 +81,12 @@ def test_detect_and_items_walk_folders_in_order_with_stable_offsets(pstfile, fak
     assert pst.detect(str(pstfile)) and not pst.detect(str(tmp_path)) and not pst.detect(str(tmp_path / "x.mbox"))
     got = list(pst.items(str(pstfile), str(tmp_path), fake()))
     assert [(g["offset"], g["labels"][0]) for g in got] == [
-        (1 * pst.STEP + 2, "inbox"),
-        (1 * pst.STEP + 10, "inbox"),
-        (2 * pst.STEP + 1, "inbox/family"),
-        (3 * pst.STEP + 1, "junk e-mail"),
-        (4 * pst.STEP + 1, "sent items"),
+        (1 * pst.STEP + 1, "deleted items"),
+        (2 * pst.STEP + 2, "inbox"),
+        (2 * pst.STEP + 10, "inbox"),
+        (3 * pst.STEP + 1, "inbox/family"),
+        (4 * pst.STEP + 1, "junk e-mail"),
+        (5 * pst.STEP + 1, "sent items"),
     ]  # numeric file order, then folder path order; the contact is not mail
     assert not list(tmp_path.glob("strata-pst-*"))  # the scratch export is removed
 
@@ -88,18 +94,20 @@ def test_detect_and_items_walk_folders_in_order_with_stable_offsets(pstfile, fak
 def test_load_labels_dates_and_is_idempotent(db_session, pstfile, fake, tmp_path):
     exe = fake()
     n = ingest.sync_tree(db_session, "old", str(pstfile), None, "Old", workdir=str(tmp_path), readpst=exe)
-    assert n == 5
+    assert n == 6
     db_session.flush()
     rows = {m.subject: m for m in db_session.scalars(select(Message))}
     assert all(m.source == "pst" and m.account == "old" for m in rows.values())
     assert (rows["out"].tier, rows["out"].tier_reason, rows["out"].body_text) == ("keep", "sent", "sent text")
+    assert rows["gone"].tier_reason == "spam-trash" and "trash" in rows["gone"].labels  # Deleted Items came with -D
+    assert rows["out"].labels == "sent items,sent"  # the store directory is not part of the folder path
     assert rows["junk"].tier_reason == "spam-trash" and rows["fam"].labels == "inbox/family,inbox"
     assert rows["ten"].at is None  # no Date and no Received: stays undated
     assert ingest.sync_tree(db_session, "old", str(pstfile), None, workdir=str(tmp_path), readpst=exe) is None
-    assert ingest.sync_tree(db_session, "old", str(pstfile), None, force=True, workdir=str(tmp_path), readpst=exe) == 5
+    assert ingest.sync_tree(db_session, "old", str(pstfile), None, force=True, workdir=str(tmp_path), readpst=exe) == 6
     db_session.flush()
-    assert db_session.scalar(select(func.count()).select_from(Message)) == 5
-    assert db_session.get(Source, ("old", "pst")).rows == 5
+    assert db_session.scalar(select(func.count()).select_from(Message)) == 6
+    assert db_session.get(Source, ("old", "pst")).rows == 6
 
 
 def test_a_copy_in_two_folders_is_two_rows_and_keep_all_keeps_them(db_session, pstfile, fake, tmp_path):
@@ -115,3 +123,9 @@ def test_a_copy_in_two_folders_is_two_rows_and_keep_all_keeps_them(db_session, p
 def test_a_missing_readpst_is_a_clear_error(db_session, pstfile, tmp_path):
     with pytest.raises(SystemExit, match="readpst"):
         ingest.sync_tree(db_session, "old", str(pstfile), None, workdir=str(tmp_path), readpst="no-such-readpst-binary")
+
+
+def test_a_failed_export_loads_nothing_even_if_files_were_written(db_session, pstfile, fake, tmp_path):
+    with pytest.raises(RuntimeError, match="readpst failed"):
+        ingest.sync_tree(db_session, "old", str(pstfile), None, workdir=str(tmp_path), readpst=fake(rc=2))
+    assert db_session.get(Source, ("old", "pst")) is None

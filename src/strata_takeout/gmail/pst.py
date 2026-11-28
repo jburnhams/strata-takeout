@@ -146,7 +146,10 @@ def stubs(path: str) -> dict[str, list[tuple[str, bytes, float | None]]]:
         return {}
     out: dict[str, list[tuple[str, bytes, float | None]]] = {}
     pf = pypff.file()
-    pf.open(path)
+    try:
+        pf.open(path)
+    except OSError:  # libpff cannot open it (readpst may still): no recovery
+        return {}
 
     def walk(f, parts: list[str]) -> None:
         for i in range(f.number_of_sub_messages):
